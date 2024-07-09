@@ -7,18 +7,34 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		E22BEDCF2C34A2200061C4D2 /* GameBoyCPU.swift in Sources */ = {isa = PBXBuildFile; fileRef = E22BEDCE2C34A2200061C4D2 /* GameBoyCPU.swift */; };
+		E22BEDD32C34BFA10061C4D2 /* GameBoyMemory.swift in Sources */ = {isa = PBXBuildFile; fileRef = E22BEDD22C34BFA10061C4D2 /* GameBoyMemory.swift */; };
+		E22BEDD52C34C7090061C4D2 /* GameBoyPPU.swift in Sources */ = {isa = PBXBuildFile; fileRef = E22BEDD42C34C7090061C4D2 /* GameBoyPPU.swift */; };
+		E22BEDD72C34CAAB0061C4D2 /* GameBoyJoypad.swift in Sources */ = {isa = PBXBuildFile; fileRef = E22BEDD62C34CAAB0061C4D2 /* GameBoyJoypad.swift */; };
+		E22BEDDA2C354DBA0061C4D2 /* KeyboardJoypad.swift in Sources */ = {isa = PBXBuildFile; fileRef = E22BEDD92C354DBA0061C4D2 /* KeyboardJoypad.swift */; };
+		E22BEDDD2C3C16C40061C4D2 /* CPUInstruction.swift in Sources */ = {isa = PBXBuildFile; fileRef = E22BEDDC2C3C16C40061C4D2 /* CPUInstruction.swift */; };
+		E2443A9C2C3CA5DB00113A62 /* GameBoy.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2443A9B2C3CA5DB00113A62 /* GameBoy.swift */; };
+		E2443AA02C3CAB8B00113A62 /* Pokemon Red Version.gb in Resources */ = {isa = PBXBuildFile; fileRef = E2443A9F2C3CAB8B00113A62 /* Pokemon Red Version.gb */; };
+		E2443AA32C3D3B9100113A62 /* CPUInstruction+CustomDebugStringConvertible.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2443AA22C3D3B9100113A62 /* CPUInstruction+CustomDebugStringConvertible.swift */; };
 		E2674EAA2C281FA500EE0206 /* GameBoyEmuApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2674EA92C281FA500EE0206 /* GameBoyEmuApp.swift */; };
 		E2674EAC2C281FA500EE0206 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2674EAB2C281FA500EE0206 /* ContentView.swift */; };
-		E2674EAE2C281FA500EE0206 /* Item.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2674EAD2C281FA500EE0206 /* Item.swift */; };
 		E2674EB02C281FA600EE0206 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = E2674EAF2C281FA600EE0206 /* Assets.xcassets */; };
 		E2674EB42C281FA600EE0206 /* Preview Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = E2674EB32C281FA600EE0206 /* Preview Assets.xcassets */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		E22BEDCE2C34A2200061C4D2 /* GameBoyCPU.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GameBoyCPU.swift; sourceTree = "<group>"; };
+		E22BEDD22C34BFA10061C4D2 /* GameBoyMemory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GameBoyMemory.swift; sourceTree = "<group>"; };
+		E22BEDD42C34C7090061C4D2 /* GameBoyPPU.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GameBoyPPU.swift; sourceTree = "<group>"; };
+		E22BEDD62C34CAAB0061C4D2 /* GameBoyJoypad.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GameBoyJoypad.swift; sourceTree = "<group>"; };
+		E22BEDD92C354DBA0061C4D2 /* KeyboardJoypad.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyboardJoypad.swift; sourceTree = "<group>"; };
+		E22BEDDC2C3C16C40061C4D2 /* CPUInstruction.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CPUInstruction.swift; sourceTree = "<group>"; };
+		E2443A9B2C3CA5DB00113A62 /* GameBoy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GameBoy.swift; sourceTree = "<group>"; };
+		E2443A9F2C3CAB8B00113A62 /* Pokemon Red Version.gb */ = {isa = PBXFileReference; lastKnownFileType = file; path = "Pokemon Red Version.gb"; sourceTree = "<group>"; };
+		E2443AA22C3D3B9100113A62 /* CPUInstruction+CustomDebugStringConvertible.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CPUInstruction+CustomDebugStringConvertible.swift"; sourceTree = "<group>"; };
 		E2674EA62C281FA500EE0206 /* GameBoyEmu.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = GameBoyEmu.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		E2674EA92C281FA500EE0206 /* GameBoyEmuApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GameBoyEmuApp.swift; sourceTree = "<group>"; };
 		E2674EAB2C281FA500EE0206 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
-		E2674EAD2C281FA500EE0206 /* Item.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Item.swift; sourceTree = "<group>"; };
 		E2674EAF2C281FA600EE0206 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		E2674EB12C281FA600EE0206 /* GameBoyEmu.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = GameBoyEmu.entitlements; sourceTree = "<group>"; };
 		E2674EB32C281FA600EE0206 /* Preview Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = "Preview Assets.xcassets"; sourceTree = "<group>"; };
@@ -35,6 +51,46 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		E22BEDCD2C34A1D00061C4D2 /* Hardware */ = {
+			isa = PBXGroup;
+			children = (
+				E22BEDD82C354DAE0061C4D2 /* Joypad */,
+				E22BEDDB2C3C16BB0061C4D2 /* CPU */,
+				E22BEDD42C34C7090061C4D2 /* GameBoyPPU.swift */,
+				E22BEDD22C34BFA10061C4D2 /* GameBoyMemory.swift */,
+				E2443A9B2C3CA5DB00113A62 /* GameBoy.swift */,
+			);
+			path = Hardware;
+			sourceTree = "<group>";
+		};
+		E22BEDD82C354DAE0061C4D2 /* Joypad */ = {
+			isa = PBXGroup;
+			children = (
+				E22BEDD62C34CAAB0061C4D2 /* GameBoyJoypad.swift */,
+				E22BEDD92C354DBA0061C4D2 /* KeyboardJoypad.swift */,
+			);
+			path = Joypad;
+			sourceTree = "<group>";
+		};
+		E22BEDDB2C3C16BB0061C4D2 /* CPU */ = {
+			isa = PBXGroup;
+			children = (
+				E22BEDDC2C3C16C40061C4D2 /* CPUInstruction.swift */,
+				E2443AA22C3D3B9100113A62 /* CPUInstruction+CustomDebugStringConvertible.swift */,
+				E22BEDCE2C34A2200061C4D2 /* GameBoyCPU.swift */,
+			);
+			path = CPU;
+			sourceTree = "<group>";
+		};
+		E2443AA12C3CAB9300113A62 /* Views */ = {
+			isa = PBXGroup;
+			children = (
+				E2674EA92C281FA500EE0206 /* GameBoyEmuApp.swift */,
+				E2674EAB2C281FA500EE0206 /* ContentView.swift */,
+			);
+			path = Views;
+			sourceTree = "<group>";
+		};
 		E2674E9D2C281FA500EE0206 = {
 			isa = PBXGroup;
 			children = (
@@ -54,9 +110,9 @@
 		E2674EA82C281FA500EE0206 /* GameBoyEmu */ = {
 			isa = PBXGroup;
 			children = (
-				E2674EA92C281FA500EE0206 /* GameBoyEmuApp.swift */,
-				E2674EAB2C281FA500EE0206 /* ContentView.swift */,
-				E2674EAD2C281FA500EE0206 /* Item.swift */,
+				E2443AA12C3CAB9300113A62 /* Views */,
+				E22BEDCD2C34A1D00061C4D2 /* Hardware */,
+				E2443A9F2C3CAB8B00113A62 /* Pokemon Red Version.gb */,
 				E2674EAF2C281FA600EE0206 /* Assets.xcassets */,
 				E2674EB12C281FA600EE0206 /* GameBoyEmu.entitlements */,
 				E2674EB22C281FA600EE0206 /* Preview Content */,
@@ -130,6 +186,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				E2443AA02C3CAB8B00113A62 /* Pokemon Red Version.gb in Resources */,
 				E2674EB42C281FA600EE0206 /* Preview Assets.xcassets in Resources */,
 				E2674EB02C281FA600EE0206 /* Assets.xcassets in Resources */,
 			);
@@ -142,9 +199,16 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				E22BEDD72C34CAAB0061C4D2 /* GameBoyJoypad.swift in Sources */,
+				E2443A9C2C3CA5DB00113A62 /* GameBoy.swift in Sources */,
+				E22BEDDD2C3C16C40061C4D2 /* CPUInstruction.swift in Sources */,
+				E22BEDD52C34C7090061C4D2 /* GameBoyPPU.swift in Sources */,
+				E22BEDDA2C354DBA0061C4D2 /* KeyboardJoypad.swift in Sources */,
+				E2443AA32C3D3B9100113A62 /* CPUInstruction+CustomDebugStringConvertible.swift in Sources */,
 				E2674EAC2C281FA500EE0206 /* ContentView.swift in Sources */,
-				E2674EAE2C281FA500EE0206 /* Item.swift in Sources */,
+				E22BEDCF2C34A2200061C4D2 /* GameBoyCPU.swift in Sources */,
 				E2674EAA2C281FA500EE0206 /* GameBoyEmuApp.swift in Sources */,
+				E22BEDD32C34BFA10061C4D2 /* GameBoyMemory.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -271,6 +335,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = GameBoyEmu/GameBoyEmu.entitlements;
+				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_ASSET_PATHS = "\"GameBoyEmu/Preview Content\"";
@@ -278,6 +343,8 @@
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = "Game Boy Emu";
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.games";
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphoneos*]" = YES;
@@ -288,7 +355,7 @@
 				"INFOPLIST_KEY_UIStatusBarStyle[sdk=iphonesimulator*]" = UIStatusBarStyleDefault;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
-				IPHONEOS_DEPLOYMENT_TARGET = 17.4;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
 				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
@@ -309,6 +376,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = GameBoyEmu/GameBoyEmu.entitlements;
+				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_ASSET_PATHS = "\"GameBoyEmu/Preview Content\"";
@@ -316,6 +384,8 @@
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = "Game Boy Emu";
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.games";
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphoneos*]" = YES;
@@ -326,7 +396,7 @@
 				"INFOPLIST_KEY_UIStatusBarStyle[sdk=iphonesimulator*]" = UIStatusBarStyleDefault;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
-				IPHONEOS_DEPLOYMENT_TARGET = 17.4;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
 				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
