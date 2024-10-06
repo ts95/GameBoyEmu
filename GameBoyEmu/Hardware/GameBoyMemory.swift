@@ -39,7 +39,7 @@ enum BankingMode: UInt8 {
     case ram = 1
 }
 
-class GameBoyMemory: MemoryAddressInterface {
+class GameBoyMemory: AddressBusProtocol {
 
     // MARK: - CPU memory
 
@@ -67,7 +67,7 @@ class GameBoyMemory: MemoryAddressInterface {
     var hram: Array<UInt8>
 
     // Single bit determining whether CPU interrupt is enabled.
-    var interruptEnableReg = false
+    var interruptEnableReg: UInt8 = 0
 
     // MARK: - PPU memory
 
@@ -116,7 +116,7 @@ class GameBoyMemory: MemoryAddressInterface {
             case WRAM_START...WRAM_END:
                 return wram[address - WRAM_START]
             case ECHO_RAM_START...ECHO_RAM_END:
-                return wram[address - (ECHO_RAM_START - WRAM_START)]
+                return wram[address - ECHO_RAM_START]
             case OAM_START...OAM_END:
                 return oam[address - OAM_START]
             case IO_PORTS_START...IO_PORTS_END:
@@ -124,7 +124,7 @@ class GameBoyMemory: MemoryAddressInterface {
             case HRAM_START...HRAM_END:
                 return hram[address - HRAM_START]
             case INTERRUPT_ENABLE_REGISTER:
-                return interruptEnableReg ? 1 : 0
+                return interruptEnableReg
             default:
                 // Out of bounds access returns 0
                 return 0
@@ -143,7 +143,7 @@ class GameBoyMemory: MemoryAddressInterface {
             case WRAM_START...WRAM_END:
                 wram[address - WRAM_START] = newValue
             case ECHO_RAM_START...ECHO_RAM_END:
-                wram[address - (ECHO_RAM_START - WRAM_START)] = newValue
+                wram[address - ECHO_RAM_START] = newValue
             case OAM_START...OAM_END:
                 oam[address - OAM_START] = newValue
             case IO_PORTS_START...IO_PORTS_END:
@@ -151,7 +151,7 @@ class GameBoyMemory: MemoryAddressInterface {
             case HRAM_START...HRAM_END:
                 hram[address - HRAM_START] = newValue
             case INTERRUPT_ENABLE_REGISTER:
-                interruptEnableReg = newValue != 0
+                interruptEnableReg = newValue
             case MBC1_ROM_BANK_NUMBER_START...MBC1_ROM_BANK_NUMBER_END:
                 writeBank1(value: newValue)
             case MBC1_RAM_BANK_NUMBER_START...MBC1_RAM_BANK_NUMBER_END:
@@ -172,8 +172,58 @@ class GameBoyMemory: MemoryAddressInterface {
         for (index, byte) in data.prefix(ROM_BANK_1_END).enumerated() {
             self[index] = byte
         }
+
+        initializeHardware()
     }
-    
+
+    private func initializeHardware() {
+        // Timer Registers
+        self[0xFF05] = 0x00 // TIMA: Timer Counter
+        self[0xFF06] = 0x00 // TMA: Timer Modulo
+        self[0xFF07] = 0x00 // TAC: Timer Control
+
+        // Sound Registers (disabled)
+        self[0xFF10] = 0x80 // NR10: Sound Mode 1 Register, sweep
+        self[0xFF11] = 0xBF // NR11: Sound Mode 1 Register, length/wave duty
+        self[0xFF12] = 0xF3 // NR12: Sound Mode 1 Register, envelope
+        self[0xFF13] = 0xFF // NR13: Sound Mode 1 Register, frequency lo
+        self[0xFF14] = 0xBF // NR14: Sound Mode 1 Register, frequency hi
+        self[0xFF16] = 0x3F // NR21: Sound Mode 2 Register, length/wave duty
+        self[0xFF17] = 0x00 // NR22: Sound Mode 2 Register, envelope
+        self[0xFF18] = 0xFF // NR23: Sound Mode 2 Register, frequency lo
+        self[0xFF19] = 0xBF // NR24: Sound Mode 2 Register, frequency hi
+        self[0xFF1A] = 0x7F // NR30: Sound Mode 3 Register, ON/OFF
+        self[0xFF1B] = 0xFF // NR31: Sound Mode 3 Register, length
+        self[0xFF1C] = 0x9F // NR32: Sound Mode 3 Register, output level
+        self[0xFF1D] = 0xFF // NR33: Sound Mode 3 Register, frequency lo
+        self[0xFF1E] = 0xBF // NR34: Sound Mode 3 Register, frequency hi
+        self[0xFF20] = 0xFF // NR41: Sound Mode 4 Register, length
+        self[0xFF21] = 0x00 // NR42: Sound Mode 4 Register, envelope
+        self[0xFF22] = 0x00 // NR43: Sound Mode 4 Register, polynomial counter
+        self[0xFF23] = 0xBF // NR44: Sound Mode 4 Register, counter/consecutive
+        self[0xFF24] = 0x77 // NR50: Channel control / ON-OFF / Volume
+        self[0xFF25] = 0xF3 // NR51: Selection of Sound output terminal
+        self[0xFF26] = 0xF1 // NR52: Sound on/off (enabled with no channels active)
+
+        // LCD Registers
+        self[0xFF40] = 0x91 // LCDC: LCD Control
+        self[0xFF41] = 0x00 // STAT: LCDC Status
+        self[0xFF42] = 0x00 // SCY: Scroll Y
+        self[0xFF43] = 0x00 // SCX: Scroll X
+        self[0xFF44] = 0x00 // LY: LCDC Y-Coordinate
+        self[0xFF45] = 0x00 // LYC: LY Compare
+        self[0xFF46] = 0xFF // DMA: DMA Transfer and Start Address
+        self[0xFF47] = 0xFC // BGP: BG Palette Data
+        self[0xFF48] = 0xFF // OBP0: Object Palette 0 Data
+        self[0xFF49] = 0xFF // OBP1: Object Palette 1 Data
+        self[0xFF4A] = 0x00 // WY: Window Y Position
+        self[0xFF4B] = 0x00 // WX: Window X Position
+
+        // Disable all interrupts
+        self[0xFFFF] = 0x00 // IE: Interrupt Enable
+        self[0xFF0F] = 0xE1 // IF: Interrupt Flag
+    }
+
     // MARK: - Bank Switching
 
     private func writeBank1(value: UInt8) {
@@ -203,6 +253,6 @@ class GameBoyMemory: MemoryAddressInterface {
     }
 }
 
-protocol MemoryAddressInterface {
+protocol AddressBusProtocol {
     subscript(address: Int) -> UInt8 { get set }
 }

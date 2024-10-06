@@ -7,15 +7,24 @@
 
 import Foundation
 
-class GameBoy {
-    let memory: GameBoyMemory
-    let cpu: GameBoyCPU<GameBoyMemory>
-    let ppu: GameBoyPPU<GameBoyMemory>
+/// The class that ties all of the Game Boy's components together into a cohesive whole.
+/// Instantiate and start with a game ROM.
+class GameBoy: ObservableObject {
+    let clock: GameBoyClock
+    var memory: GameBoyMemory
+    @Published var cpu: GameBoyCPU<GameBoyMemory>
+    @Published var ppu: GameBoyPPU<GameBoyMemory>
 
     init() {
-        memory = GameBoyMemory()
-        cpu = GameBoyCPU(memory: memory)
-        ppu = GameBoyPPU(memory: memory)
+        let clock = GameBoyClock()
+        let memory = GameBoyMemory()
+        let cpu = GameBoyCPU(addressBus: memory)
+        let ppu = GameBoyPPU(addressBus: memory)
+
+        self.clock = clock
+        self.memory = memory
+        self.cpu = cpu
+        self.ppu = ppu
     }
 
     func start(withROM data: Data) async {
@@ -23,7 +32,15 @@ class GameBoy {
 
         while true {
             do {
-                try await cpu.step()
+                if cpu.isClockHalted || cpu.isClockStopped {
+                    try await Task.sleep(nanoseconds: 1_000_000_000)
+                    cpu.isClockStopped = false
+                    continue
+                }
+
+                let tCycles = cpu.step()
+                ppu.step(cycles: tCycles)
+                try await clock.tick(cycles: tCycles)
             } catch {
                 debugPrint(error.localizedDescription)
             }

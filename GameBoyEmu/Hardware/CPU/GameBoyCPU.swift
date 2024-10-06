@@ -16,15 +16,15 @@ enum FlagBit: UInt8 {
 
 /// Swift implementation of the custom 8-bit Sharp LR35902 processor of the Game Boy.
 /// The processor operates at approximately 4.19 MHz and uses the little endian layout.
-class GameBoyCPU<Memory: MemoryAddressInterface> {
+class GameBoyCPU<AddressBus: AddressBusProtocol>: ObservableObject {
 
     // MARK: CPU state
 
-    var isClockHalted = false
-    var isClockStopped = false
-    var isInterruptMasterEnabled = false {
+    @Published var isClockHalted = false
+    @Published var isClockStopped = false
+    @Published var isInterruptMasterEnabled = false {
         didSet {
-            memory[0xFFFF] = isInterruptMasterEnabled ? 1 : 0
+            addressBus[0xFFFF] = isInterruptMasterEnabled ? 1 : 0
         }
     }
 
@@ -44,21 +44,11 @@ class GameBoyCPU<Memory: MemoryAddressInterface> {
     // MARK: Special-purpose registers
 
     /// Stack pointer
-    var sp: UInt16 = 0xFFFE
+    @Published var sp: UInt16 = 0xFFFE
     /// Program counter
-    var pc: UInt16 = 0x0100
+    @Published var pc: UInt16 = 0x0100
 
     // MARK: Combined registers (16-bit register pairs)
-
-    var af: UInt16 {
-        get {
-            return (UInt16(a) << 8) | UInt16(f)
-        }
-        set {
-            a = UInt8((newValue >> 8) & 0xFF)
-            f = UInt8(newValue & 0xFF)
-        }
-    }
 
     var bc: UInt16 {
         get {
@@ -92,12 +82,12 @@ class GameBoyCPU<Memory: MemoryAddressInterface> {
 
     // MARK: Memory
 
-    var memory: Memory
+    var addressBus: AddressBus
 
     // MARK: - Initializer
 
-    init(memory: Memory) {
-        self.memory = memory
+    init(addressBus: AddressBus) {
+        self.addressBus = addressBus
     }
 
     // MARK: - Methods
@@ -198,36 +188,36 @@ class GameBoyCPU<Memory: MemoryAddressInterface> {
     }
 
     func fetchWord() -> UInt16 {
-        let low = memory[Int(pc)]
+        let low = addressBus[Int(pc)]
         pc += 1
-        let high = memory[Int(pc)]
+        let high = addressBus[Int(pc)]
         pc += 1
         return UInt16(high) << 8 | UInt16(low)
     }
 
     func pushWord(_ value: UInt16) {
-        sp -= 1
-        memory[Int(sp)] = UInt8((value >> 8) & 0xFF)
-        sp -= 1
-        memory[Int(sp)] = UInt8(value & 0xFF)
+        sp &-= 1
+        addressBus[Int(sp)] = UInt8((value >> 8) & 0xFF)
+        sp &-= 1
+        addressBus[Int(sp)] = UInt8(value & 0xFF)
     }
 
     func popWord() -> UInt16 {
-        let low = memory[Int(sp)]
-        sp += 1
-        let high = memory[Int(sp)]
-        sp += 1
+        let low = addressBus[Int(sp)]
+        sp &+= 1
+        let high = addressBus[Int(sp)]
+        sp &+= 1
         return UInt16(high) << 8 | UInt16(low)
     }
 
-    func step() async throws {
-        let opcode = memory[Int(pc)]
+    func step() -> Int {
+        let opcode = addressBus[Int(pc)]
         pc += 1
 
         let instruction: CPUInstruction
 
         if opcode == 0xCB {
-            let cbOpcode = memory[Int(pc)]
+            let cbOpcode = addressBus[Int(pc)]
             pc += 1
 
             instruction = getInstruction(opcode: cbOpcode, isCBPrefixed: true)
@@ -236,11 +226,38 @@ class GameBoyCPU<Memory: MemoryAddressInterface> {
         }
 
         let tCycles = execute(instruction: instruction)
-        let duration = UInt64(tCycles) * 238 // Each T cycle is 238 nanoseconds
-
-        try await Task.sleep(nanoseconds: duration)
 
         print("\(UInt64(Date().timeIntervalSince1970 * 100_000)): executed \(instruction)")
+
+        handleInterrupts()
+
+        return tCycles
+    }
+    
+    func handleInterrupts() {
+        if isInterruptMasterEnabled {
+            let ie = addressBus[0xFFFF]
+            let ifr = addressBus[0xFF0F]
+            let pendingInterrupts = ie & ifr
+
+            if pendingInterrupts != 0 {
+                // There is a pending interrupt
+                if pendingInterrupts & 0x01 != 0 {
+                    // VBlank interrupt is requested
+                    addressBus[0xFF0F] &= ~0x01 // Clear the VBlank interrupt flag
+                    serviceInterrupt(address: 0x0040) // VBlank interrupt vector address
+                }
+            }
+        }
+    }
+
+    func serviceInterrupt(address: UInt16) {
+        addressBus[Int(sp) - 1] = UInt8((pc >> 8) & 0xFF)
+        addressBus[Int(sp) - 2] = UInt8(pc & 0xFF)
+        // Set the new program counter to the interrupt vector
+        pc = address
+        // Disable interrupts to prevent nested interrupts
+        isInterruptMasterEnabled = false
     }
 
     func execute(instruction: CPUInstruction) -> Int {
@@ -254,95 +271,95 @@ class GameBoyCPU<Memory: MemoryAddressInterface> {
             return instruction.cycles.count()
 
         case .loadRegisterFromImmediate(let dest):
-            let value = memory[Int(pc)]
+            let value = addressBus[Int(pc)]
             pc += 1
             setRegister(dest, to: value)
             return instruction.cycles.count()
 
         case .loadRegisterFromAddressHL(let dest):
             let address = hl
-            let value = memory[Int(address)]
+            let value = addressBus[Int(address)]
             setRegister(dest, to: value)
             return instruction.cycles.count()
 
         case .loadAddressHLFromRegister(let src):
             let address = hl
             let value = getRegister(src)
-            memory[Int(address)] = value
+            addressBus[Int(address)] = value
             return instruction.cycles.count()
 
         case .loadAddressHLFromImmediate:
             let address = hl
-            let value = memory[Int(pc)]
+            let value = addressBus[Int(pc)]
             pc += 1
-            memory[Int(address)] = value
+            addressBus[Int(address)] = value
             return instruction.cycles.count()
 
         case .loadAFromAddressBC:
-            a = memory[Int(bc)]
+            a = addressBus[Int(bc)]
             return instruction.cycles.count()
 
         case .loadAFromAddressDE:
-            a = memory[Int(de)]
+            a = addressBus[Int(de)]
             return instruction.cycles.count()
 
         case .loadAddressBCFromA:
-            memory[Int(bc)] = a
+            addressBus[Int(bc)] = a
             return instruction.cycles.count()
 
         case .loadAddressDEFromA:
-            memory[Int(de)] = a
+            addressBus[Int(de)] = a
             return instruction.cycles.count()
 
         case .loadAFromAddressNN:
             let address = fetchWord()
-            a = memory[Int(address)]
+            a = addressBus[Int(address)]
             return instruction.cycles.count()
 
         case .loadAddressNNFromA:
             let address = fetchWord()
-            memory[Int(address)] = a
+            addressBus[Int(address)] = a
             return instruction.cycles.count()
 
         case .loadAFromAddressFF00PlusC:
             let address = 0xFF00 + UInt16(c)
-            a = memory[Int(address)]
+            a = addressBus[Int(address)]
             return instruction.cycles.count()
 
         case .loadAddressFF00PlusCFromA:
             let address = 0xFF00 + UInt16(c)
-            memory[Int(address)] = a
+            addressBus[Int(address)] = a
             return instruction.cycles.count()
 
         case .loadAFromAddressFF00PlusN:
-            let address = 0xFF00 + UInt16(memory[Int(pc)])
+            let address = 0xFF00 + UInt16(addressBus[Int(pc)])
             pc += 1
-            a = memory[Int(address)]
+            a = addressBus[Int(address)]
             return instruction.cycles.count()
 
         case .loadAddressFF00PlusNFromA:
-            let address = 0xFF00 + UInt16(memory[Int(pc)])
+            let address = 0xFF00 + UInt16(addressBus[Int(pc)])
             pc += 1
-            memory[Int(address)] = a
+            addressBus[Int(address)] = a
             return instruction.cycles.count()
 
         case .loadAFromAddressHLAndDecrement:
-            a = memory[Int(hl)]
+            a = addressBus[Int(hl)]
             hl -= 1
             return instruction.cycles.count()
 
         case .loadAddressHLAndDecrementFromA:
-            memory[Int(hl)] = a
+            addressBus[Int(hl)] = a
             hl -= 1
             return instruction.cycles.count()
 
         case .loadAFromAddressHLAndIncrement:
-            a = memory[Int(hl)]
+            a = addressBus[Int(hl)]
             hl += 1
             return instruction.cycles.count()
 
         case .loadAddressHLAndIncrementFromA:
-            memory[Int(hl)] = a
+            addressBus[Int(hl)] = a
             hl += 1
             return instruction.cycles.count()
 
@@ -353,8 +370,8 @@ class GameBoyCPU<Memory: MemoryAddressInterface> {
 
         case .loadAddressNNFromSP:
             let address = fetchWord()
-            memory[Int(address)] = UInt8(sp & 0xFF)
-            memory[Int(address + 1)] = UInt8((sp >> 8) & 0xFF)
+            addressBus[Int(address)] = UInt8(sp & 0xFF)
+            addressBus[Int(address + 1)] = UInt8((sp >> 8) & 0xFF)
             return instruction.cycles.count()
 
         case .loadSPFromHL:
@@ -370,17 +387,17 @@ class GameBoyCPU<Memory: MemoryAddressInterface> {
             return instruction.cycles.count()
 
         case .loadHLFromSPPlusE:
-            let offset = Int8(bitPattern: memory[Int(pc)])
+            let offset = Int8(bitPattern: addressBus[Int(pc)])
             pc += 1
             let result = Int(sp) + Int(offset)
             clear(flag: .zero)
             clear(flag: .subtraction)
-            if (sp & 0xF) + (UInt16(offset) & 0xF) > 0xF {
+            if (sp & 0xF) + (UInt16(bitPattern: Int16(offset)) & 0xF) > 0xF {
                 set(flag: .halfCarry)
             } else {
                 clear(flag: .halfCarry)
             }
-            if (sp & 0xFF) + UInt16(offset) > 0xFF {
+            if (sp & 0xFF) + (UInt16(bitPattern: Int16(offset)) & 0xFF) > 0xFF {
                 set(flag: .carry)
             } else {
                 clear(flag: .carry)
@@ -394,12 +411,12 @@ class GameBoyCPU<Memory: MemoryAddressInterface> {
             return instruction.cycles.count()
 
         case .addAWithAddressHL:
-            let value = memory[Int(hl)]
+            let value = addressBus[Int(hl)]
             addToA(value)
             return instruction.cycles.count()
 
         case .addAWithImmediate:
-            let value = memory[Int(pc)]
+            let value = addressBus[Int(pc)]
             pc += 1
             addToA(value)
             return instruction.cycles.count()
@@ -410,12 +427,12 @@ class GameBoyCPU<Memory: MemoryAddressInterface> {
             return instruction.cycles.count()
 
         case .addAWithCarryAddressHL:
-            let value = memory[Int(hl)]
+            let value = addressBus[Int(hl)]
             addToA(value, withCarry: true)
             return instruction.cycles.count()
 
         case .addAWithCarryImmediate:
-            let value = memory[Int(pc)]
+            let value = addressBus[Int(pc)]
             pc += 1
             addToA(value, withCarry: true)
             return instruction.cycles.count()
@@ -426,12 +443,12 @@ class GameBoyCPU<Memory: MemoryAddressInterface> {
             return instruction.cycles.count()
 
         case .subtractAWithAddressHL:
-            let value = memory[Int(hl)]
+            let value = addressBus[Int(hl)]
             subFromA(value)
             return instruction.cycles.count()
 
         case .subtractAWithImmediate:
-            let value = memory[Int(pc)]
+            let value = addressBus[Int(pc)]
             pc += 1
             subFromA(value)
             return instruction.cycles.count()
@@ -442,12 +459,12 @@ class GameBoyCPU<Memory: MemoryAddressInterface> {
             return instruction.cycles.count()
 
         case .subtractAWithCarryAddressHL:
-            let value = memory[Int(hl)]
+            let value = addressBus[Int(hl)]
             subFromA(value, withCarry: true)
             return instruction.cycles.count()
 
         case .subtractAWithCarryImmediate:
-            let value = memory[Int(pc)]
+            let value = addressBus[Int(pc)]
             pc += 1
             subFromA(value, withCarry: true)
             return instruction.cycles.count()
@@ -458,12 +475,12 @@ class GameBoyCPU<Memory: MemoryAddressInterface> {
             return instruction.cycles.count()
 
         case .compareAWithAddressHL:
-            let value = memory[Int(hl)]
+            let value = addressBus[Int(hl)]
             compareA(with: value)
             return instruction.cycles.count()
 
         case .compareAWithImmediate:
-            let value = memory[Int(pc)]
+            let value = addressBus[Int(pc)]
             pc += 1
             compareA(with: value)
             return instruction.cycles.count()
@@ -487,9 +504,9 @@ class GameBoyCPU<Memory: MemoryAddressInterface> {
 
         case .incrementAddressHL:
             let address = hl
-            let value = memory[Int(address)]
+            let value = addressBus[Int(address)]
             let result = value &+ 1
-            memory[Int(address)] = result
+            addressBus[Int(address)] = result
             if result == 0 {
                 set(flag: .zero)
             } else {
@@ -522,9 +539,9 @@ class GameBoyCPU<Memory: MemoryAddressInterface> {
 
         case .decrementAddressHL:
             let address = hl
-            let value = memory[Int(address)]
+            let value = addressBus[Int(address)]
             let result = value &- 1
-            memory[Int(address)] = result
+            addressBus[Int(address)] = result
             if result == 0 {
                 set(flag: .zero)
             } else {
@@ -552,7 +569,7 @@ class GameBoyCPU<Memory: MemoryAddressInterface> {
             return instruction.cycles.count()
 
         case .bitwiseAndWithAddressHL:
-            let value = memory[Int(hl)]
+            let value = addressBus[Int(hl)]
             a &= value
             if a == 0 {
                 set(flag: .zero)
@@ -565,7 +582,7 @@ class GameBoyCPU<Memory: MemoryAddressInterface> {
             return instruction.cycles.count()
 
         case .bitwiseAndWithImmediate:
-            let value = memory[Int(pc)]
+            let value = addressBus[Int(pc)]
             pc += 1
             a &= value
             if a == 0 {
@@ -592,7 +609,7 @@ class GameBoyCPU<Memory: MemoryAddressInterface> {
             return instruction.cycles.count()
 
         case .bitwiseOrWithAddressHL:
-            let value = memory[Int(hl)]
+            let value = addressBus[Int(hl)]
             a |= value
             if a == 0 {
                 set(flag: .zero)
@@ -605,7 +622,7 @@ class GameBoyCPU<Memory: MemoryAddressInterface> {
             return instruction.cycles.count()
 
         case .bitwiseOrWithImmediate:
-            let value = memory[Int(pc)]
+            let value = addressBus[Int(pc)]
             pc += 1
             a |= value
             if a == 0 {
@@ -632,7 +649,7 @@ class GameBoyCPU<Memory: MemoryAddressInterface> {
             return instruction.cycles.count()
 
         case .bitwiseXorWithAddressHL:
-            let value = memory[Int(hl)]
+            let value = addressBus[Int(hl)]
             a ^= value
             if a == 0 {
                 set(flag: .zero)
@@ -645,7 +662,7 @@ class GameBoyCPU<Memory: MemoryAddressInterface> {
             return instruction.cycles.count()
 
         case .bitwiseXorWithImmediate:
-            let value = memory[Int(pc)]
+            let value = addressBus[Int(pc)]
             pc += 1
             a ^= value
             if a == 0 {
@@ -730,17 +747,17 @@ class GameBoyCPU<Memory: MemoryAddressInterface> {
             return instruction.cycles.count()
 
         case .addSPWithE:
-            let offset = Int8(bitPattern: memory[Int(pc)])
+            let offset = Int8(bitPattern: addressBus[Int(pc)])
             pc += 1
             let result = Int(sp) + Int(offset)
             clear(flag: .zero)
             clear(flag: .subtraction)
-            if (sp & 0xF) + (UInt16(offset) & 0xF) > 0xF {
+            if (sp & 0xF) + (UInt16(bitPattern: Int16(offset)) & 0xF) > 0xF {
                 set(flag: .halfCarry)
             } else {
                 clear(flag: .halfCarry)
             }
-            if (sp & 0xFF) + UInt16(offset) > 0xFF {
+            if (sp & 0xFF) + (UInt16(bitPattern: Int16(offset)) & 0xFF) > 0xFF {
                 set(flag: .carry)
             } else {
                 clear(flag: .carry)
@@ -836,10 +853,10 @@ class GameBoyCPU<Memory: MemoryAddressInterface> {
             return instruction.cycles.count()
 
         case .rotateLeftCircularAddressHL:
-            let value = memory[Int(hl)]
+            let value = addressBus[Int(hl)]
             let carry = value & 0x80
             let result = (value << 1) | (carry >> 7)
-            memory[Int(hl)] = result
+            addressBus[Int(hl)] = result
             if carry != 0 {
                 set(flag: .carry)
             } else {
@@ -874,10 +891,10 @@ class GameBoyCPU<Memory: MemoryAddressInterface> {
             return instruction.cycles.count()
 
         case .rotateRightCircularAddressHL:
-            let value = memory[Int(hl)]
+            let value = addressBus[Int(hl)]
             let carry = value & 0x01
             let result = (value >> 1) | (carry << 7)
-            memory[Int(hl)] = result
+            addressBus[Int(hl)] = result
             if carry != 0 {
                 set(flag: .carry)
             } else {
@@ -912,10 +929,10 @@ class GameBoyCPU<Memory: MemoryAddressInterface> {
             return instruction.cycles.count()
 
         case .rotateLeftAddressHL:
-            let value = memory[Int(hl)]
+            let value = addressBus[Int(hl)]
             let carry = value & 0x80
             let result = (value << 1) | (isSet(flag: .carry) ? 1 : 0)
-            memory[Int(hl)] = result
+            addressBus[Int(hl)] = result
             if carry != 0 {
                 set(flag: .carry)
             } else {
@@ -950,10 +967,10 @@ class GameBoyCPU<Memory: MemoryAddressInterface> {
             return instruction.cycles.count()
 
         case .rotateRightAddressHL:
-            let value = memory[Int(hl)]
+            let value = addressBus[Int(hl)]
             let carry = value & 0x01
             let result = (value >> 1) | (isSet(flag: .carry) ? 0x80 : 0)
-            memory[Int(hl)] = result
+            addressBus[Int(hl)] = result
             if carry != 0 {
                 set(flag: .carry)
             } else {
@@ -988,10 +1005,10 @@ class GameBoyCPU<Memory: MemoryAddressInterface> {
             return instruction.cycles.count()
 
         case .shiftLeftArithmeticAddressHL:
-            let value = memory[Int(hl)]
+            let value = addressBus[Int(hl)]
             let carry = value & 0x80
             let result = value << 1
-            memory[Int(hl)] = result
+            addressBus[Int(hl)] = result
             if carry != 0 {
                 set(flag: .carry)
             } else {
@@ -1026,10 +1043,10 @@ class GameBoyCPU<Memory: MemoryAddressInterface> {
             return instruction.cycles.count()
 
         case .shiftRightArithmeticAddressHL:
-            let value = memory[Int(hl)]
+            let value = addressBus[Int(hl)]
             let carry = value & 0x01
             let result = (value >> 1) | (value & 0x80)
-            memory[Int(hl)] = result
+            addressBus[Int(hl)] = result
             if carry != 0 {
                 set(flag: .carry)
             } else {
@@ -1059,9 +1076,9 @@ class GameBoyCPU<Memory: MemoryAddressInterface> {
             return instruction.cycles.count()
 
         case .swapNibblesAddressHL:
-            let value = memory[Int(hl)]
+            let value = addressBus[Int(hl)]
             let result = (value >> 4) | (value << 4)
-            memory[Int(hl)] = result
+            addressBus[Int(hl)] = result
             if result == 0 {
                 set(flag: .zero)
             } else {
@@ -1092,10 +1109,10 @@ class GameBoyCPU<Memory: MemoryAddressInterface> {
             return instruction.cycles.count()
 
         case .shiftRightLogicalAddressHL:
-            let value = memory[Int(hl)]
+            let value = addressBus[Int(hl)]
             let carry = value & 0x01
             let result = value >> 1
-            memory[Int(hl)] = result
+            addressBus[Int(hl)] = result
             if carry != 0 {
                 set(flag: .carry)
             } else {
@@ -1122,7 +1139,7 @@ class GameBoyCPU<Memory: MemoryAddressInterface> {
             return instruction.cycles.count()
 
         case .testBitAddressHL(let bit):
-            let value = memory[Int(hl)]
+            let value = addressBus[Int(hl)]
             if (value & (1 << bit)) == 0 {
                 set(flag: .zero)
             } else {
@@ -1139,9 +1156,9 @@ class GameBoyCPU<Memory: MemoryAddressInterface> {
             return instruction.cycles.count()
 
         case .resetBitAddressHL(let bit):
-            var value = memory[Int(hl)]
+            var value = addressBus[Int(hl)]
             value &= ~(1 << bit)
-            memory[Int(hl)] = value
+            addressBus[Int(hl)] = value
             return instruction.cycles.count()
 
         case .setBitRegister(let bit, let dest):
@@ -1151,9 +1168,9 @@ class GameBoyCPU<Memory: MemoryAddressInterface> {
             return instruction.cycles.count()
 
         case .setBitAddressHL(let bit):
-            var value = memory[Int(hl)]
+            var value = addressBus[Int(hl)]
             value |= (1 << bit)
-            memory[Int(hl)] = value
+            addressBus[Int(hl)] = value
             return instruction.cycles.count()
 
         case .jump(let address):
@@ -1306,46 +1323,15 @@ class GameBoyCPU<Memory: MemoryAddressInterface> {
                 let dest = CPURegister(rawValue: (opcode >> 3) & 0x07)!
                 let src = CPURegister(rawValue: opcode & 0x07)!
                 return .loadRegister(dest, src)
-            case 0x06:
-                return .loadRegisterFromImmediate(.B)
-            case 0x0E:
-                return .loadRegisterFromImmediate(.C)
-            case 0x16:
-                return .loadRegisterFromImmediate(.D)
-            case 0x1E:
-                return .loadRegisterFromImmediate(.E)
-            case 0x26:
-                return .loadRegisterFromImmediate(.H)
-            case 0x2E:
-                return .loadRegisterFromImmediate(.L)
-            case 0x3E:
-                return .loadRegisterFromImmediate(.A)
-            case 0x46:
-                return .loadRegisterFromAddressHL(.B)
-            case 0x4E:
-                return .loadRegisterFromAddressHL(.C)
-            case 0x56:
-                return .loadRegisterFromAddressHL(.D)
-            case 0x5E:
-                return .loadRegisterFromAddressHL(.E)
-            case 0x66:
-                return .loadRegisterFromAddressHL(.H)
-            case 0x6E:
-                return .loadRegisterFromAddressHL(.L)
-            case 0x7E:
-                return .loadRegisterFromAddressHL(.A)
-            case 0x70:
-                return .loadAddressHLFromRegister(.B)
-            case 0x71:
-                return .loadAddressHLFromRegister(.C)
-            case 0x72:
-                return .loadAddressHLFromRegister(.D)
-            case 0x73:
-                return .loadAddressHLFromRegister(.E)
-            case 0x74:
-                return .loadAddressHLFromRegister(.H)
-            case 0x75:
-                return .loadAddressHLFromRegister(.L)
+            case 0x06, 0x0E, 0x16, 0x1E, 0x26, 0x2E, 0x3E:
+                let register = CPURegister(rawValue: (opcode >> 3) & 0x07)!
+                return .loadRegisterFromImmediate(register)
+            case 0x46, 0x4E, 0x56, 0x5E, 0x66, 0x6E, 0x7E:
+                let register = CPURegister(rawValue: (opcode >> 3) & 0x07)!
+                return .loadRegisterFromAddressHL(register)
+            case 0x70...0x75:
+                let register = CPURegister(rawValue: opcode & 0x07)!
+                return .loadAddressHLFromRegister(register)
             case 0x36:
                 return .loadAddressHLFromImmediate
             case 0x0A:
@@ -1436,36 +1422,14 @@ class GameBoyCPU<Memory: MemoryAddressInterface> {
                 return .compareAWithAddressHL
             case 0xFE:
                 return .compareAWithImmediate
-            case 0x04:
-                return .incrementRegister(.B)
-            case 0x0C:
-                return .incrementRegister(.C)
-            case 0x14:
-                return .incrementRegister(.D)
-            case 0x1C:
-                return .incrementRegister(.E)
-            case 0x24:
-                return .incrementRegister(.H)
-            case 0x2C:
-                return .incrementRegister(.L)
-            case 0x3C:
-                return .incrementRegister(.A)
+            case 0x04, 0x0C, 0x14, 0x1C, 0x24, 0x2C, 0x3C:
+                let register = CPURegister(rawValue: (opcode >> 3) & 0x07)!
+                return .incrementRegister(register)
             case 0x34:
                 return .incrementAddressHL
-            case 0x05:
-                return .decrementRegister(.B)
-            case 0x0D:
-                return .decrementRegister(.C)
-            case 0x15:
-                return .decrementRegister(.D)
-            case 0x1D:
-                return .decrementRegister(.E)
-            case 0x25:
-                return .decrementRegister(.H)
-            case 0x2D:
-                return .decrementRegister(.L)
-            case 0x3D:
-                return .decrementRegister(.A)
+            case 0x05, 0x0D, 0x15, 0x1D, 0x25, 0x2D, 0x3D:
+                let register = CPURegister(rawValue: (opcode >> 3) & 0x07)!
+                return .decrementRegister(register)
             case 0x35:
                 return .decrementAddressHL
             case 0xA0...0xA7:
@@ -1529,31 +1493,31 @@ class GameBoyCPU<Memory: MemoryAddressInterface> {
             case 0x1F:
                 return .rotateRightAccumulator
             case 0xC3:
-                let address = UInt16(memory[Int(pc)]) | (UInt16(memory[Int(pc) + 1]) << 8)
+                let address = UInt16(addressBus[Int(pc)]) | (UInt16(addressBus[Int(pc) + 1]) << 8)
                 pc += 2
                 return .jump(address)
             case 0xE9:
                 return .jumpToHL
             case 0xC2, 0xCA, 0xD2, 0xDA:
-                let address = UInt16(memory[Int(pc)]) | (UInt16(memory[Int(pc) + 1]) << 8)
+                let address = UInt16(addressBus[Int(pc)]) | (UInt16(addressBus[Int(pc) + 1]) << 8)
                 pc += 2
                 let condition = JumpCondition(rawValue: (opcode >> 3) & 0x03)!
                 return .jumpConditional(condition, address)
             case 0x18:
-                let offset = Int8(bitPattern: memory[Int(pc)])
+                let offset = Int8(bitPattern: addressBus[Int(pc)])
                 pc += 1
                 return .relativeJump(offset)
             case 0x20, 0x28, 0x30, 0x38:
-                let offset = Int8(bitPattern: memory[Int(pc)])
+                let offset = Int8(bitPattern: addressBus[Int(pc)])
                 pc += 1
                 let condition = JumpCondition(rawValue: (opcode >> 3) & 0x03)!
                 return .relativeJumpConditional(condition, offset)
             case 0xCD:
-                let address = UInt16(memory[Int(pc)]) | (UInt16(memory[Int(pc) + 1]) << 8)
+                let address = UInt16(addressBus[Int(pc)]) | (UInt16(addressBus[Int(pc) + 1]) << 8)
                 pc += 2
                 return .callFunction(address)
             case 0xC4, 0xCC, 0xD4, 0xDC:
-                let address = UInt16(memory[Int(pc)]) | (UInt16(memory[Int(pc) + 1]) << 8)
+                let address = UInt16(addressBus[Int(pc)]) | (UInt16(addressBus[Int(pc) + 1]) << 8)
                 pc += 2
                 let condition = JumpCondition(rawValue: (opcode >> 3) & 0x03)!
                 return .callFunctionConditional(condition, address)

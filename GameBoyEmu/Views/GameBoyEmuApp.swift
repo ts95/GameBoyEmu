@@ -13,7 +13,7 @@ struct GameBoyEmuApp: App {
 
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            GameBoyView()
         }
     }
 }
