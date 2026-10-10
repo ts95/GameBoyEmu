@@ -8,19 +8,17 @@
 import Foundation
 
 /// The class that ties all of the Game Boy's components together into a cohesive whole.
-/// Instantiate and start with a game ROM.
-class GameBoy: ObservableObject {
+///
+/// This is the machine itself and nothing else: it is synchronous, knows nothing about real
+/// time, threads or the UI, and only moves when someone calls `step()`. `Emulator` is what
+/// runs it at 60 frames per second.
+final class GameBoy {
     /// T cycles per frame: 154 scanlines of 456 cycles each, which gives ~59.7 frames per second.
     static let cyclesPerFrame = 154 * 456
 
     let memory: GameBoyMemory
     let cpu: GameBoyCPU<GameBoyMemory>
     let ppu: GameBoyPPU<GameBoyMemory>
-    let joypad = KeyboardJoypad()
-
-    /// The last completed frame, one color (0-3) per pixel. Published once per frame, so the
-    /// UI redraws 60 times per second instead of once per pixel or per instruction.
-    @Published var frame: [UInt8] = Array(repeating: 0, count: displayBufferWidth * displayBufferHeight)
 
     init() {
         let memory = GameBoyMemory()
@@ -28,8 +26,6 @@ class GameBoy: ObservableObject {
         self.memory = memory
         self.cpu = GameBoyCPU(addressBus: memory)
         self.ppu = GameBoyPPU(addressBus: memory)
-
-        memory.joypad = joypad
     }
 
     /// Runs one CPU instruction and lets the rest of the hardware catch up by the same
@@ -38,77 +34,23 @@ class GameBoy: ObservableObject {
     ///
     /// - Returns: Whether the PPU completed a frame, and how many cycles passed.
     @discardableResult
-    func step() -> (frameCompleted: Bool, cycles: Int) {
-        let tCycles = cpu.step()
+    func step() throws -> (frameCompleted: Bool, cycles: Int) {
+        let tCycles = try cpu.step()
         memory.tickClock(cycles: tCycles)
         memory.apu.step(cycles: tCycles)
         return (ppu.step(cycles: tCycles), tCycles)
     }
 
     /// Runs the emulation until the PPU has finished drawing a frame.
-    func runFrame() {
+    func runFrame() throws {
         // The cycle limit ends the frame when the game has switched the LCD off
         var cycles = 0
         while cycles < GameBoy.cyclesPerFrame {
-            let result = step()
+            let result = try step()
             if result.frameCompleted {
                 break
             }
             cycles += result.cycles
-        }
-    }
-
-    // ponytail: runs on the main actor. A frame takes well under a millisecond of host time
-    // in release builds; move it to a background task if debug builds stutter.
-    /// Runs the emulation until the surrounding task is cancelled.
-    ///
-    /// - Parameters:
-    ///   - data: The cartridge ROM.
-    ///   - saveURL: Where the cartridge's battery-backed RAM is kept between sessions.
-    @MainActor
-    func start(withROM data: Data, saveURL: URL? = nil) async {
-        memory.loadCartridge(data: data, save: saveURL.flatMap { try? Data(contentsOf: $0) })
-
-        let frameDuration = Duration.seconds(Double(GameBoy.cyclesPerFrame) / GameBoyClock.frequency)
-        var nextFrame = ContinuousClock.now
-        let audio = AudioOutput()
-        var framesUntilSaveCheck = 60
-
-        // Emulate a whole frame as fast as possible, then sleep until it is due. Sleeping
-        // after every instruction can't work: a sleep takes far longer than the ~1µs asked for.
-        while !Task.isCancelled {
-            runFrame()
-            frame = ppu.displayBuffer
-
-            audio.play(samples: memory.apu.pendingSamples)
-            memory.apu.pendingSamples.removeAll(keepingCapacity: true)
-
-            // A save file is just a copy of the cartridge RAM. Checking once per second
-            // writes it shortly after the game has saved, without writing on every byte.
-            framesUntilSaveCheck -= 1
-            if framesUntilSaveCheck == 0 {
-                framesUntilSaveCheck = 60
-                if let saveURL, memory.hasBattery, memory.hasUnsavedExternalRam {
-                    writeSave(to: saveURL)
-                }
-            }
-
-            nextFrame += frameDuration
-            if nextFrame < .now - .milliseconds(100) {
-                nextFrame = .now // After a long stall, carry on from here instead of fast-forwarding
-            }
-            try? await Task.sleep(until: nextFrame, clock: .continuous)
-        }
-    }
-
-    private func writeSave(to url: URL) {
-        do {
-            try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-            // Atomic, so a crash mid-write can't leave a half-written save behind
-            try Data(memory.externalRam).write(to: url, options: .atomic)
-            memory.hasUnsavedExternalRam = false
-        } catch {
-            print("Couldn't write the save file: \(error)")
         }
     }
 }

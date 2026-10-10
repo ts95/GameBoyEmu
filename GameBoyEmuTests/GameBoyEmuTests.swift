@@ -3,66 +3,66 @@ import Testing
 @testable import GameBoyEmu
 
 /// A Game Boy with a blank 32KB cartridge that has `program` at the entry point (0x0100).
-private func makeGameBoy(program: [UInt8] = []) -> GameBoy {
+private func makeGameBoy(program: [UInt8] = []) throws -> GameBoy {
     var rom = [UInt8](repeating: 0, count: 0x8000)
     rom.replaceSubrange(0x100..<(0x100 + program.count), with: program)
 
     let gameBoy = GameBoy()
-    gameBoy.memory.loadCartridge(data: Data(rom))
+    try gameBoy.memory.loadCartridge(data: Data(rom))
     return gameBoy
 }
 
 // MARK: - Instruction decoding
 
-@Test func loadSPFromImmediateSetsSPAndLeavesAFAlone() {
-    let gameBoy = makeGameBoy(program: [0x31, 0xFE, 0xDF]) // LD SP, 0xDFFE
-    let cycles = gameBoy.cpu.step()
+@Test func loadSPFromImmediateSetsSPAndLeavesAFAlone() throws {
+    let gameBoy = try makeGameBoy(program: [0x31, 0xFE, 0xDF]) // LD SP, 0xDFFE
+    let cycles = try gameBoy.cpu.step()
 
     #expect(gameBoy.cpu.sp == 0xDFFE)
     #expect(gameBoy.cpu.a == 0x01)
     #expect(cycles == 12)
 }
 
-@Test func stackPointerArithmeticUsesSP() {
-    let gameBoy = makeGameBoy(program: [0x33, 0x3B, 0x3B, 0x39]) // INC SP, DEC SP, DEC SP, ADD HL, SP
+@Test func stackPointerArithmeticUsesSP() throws {
+    let gameBoy = try makeGameBoy(program: [0x33, 0x3B, 0x3B, 0x39]) // INC SP, DEC SP, DEC SP, ADD HL, SP
     gameBoy.cpu.sp = 0x1000
     gameBoy.cpu.hl = 0x0001
-    for _ in 0..<4 { _ = gameBoy.cpu.step() }
+    for _ in 0..<4 { _ = try gameBoy.cpu.step() }
 
     #expect(gameBoy.cpu.sp == 0x0FFF)
     #expect(gameBoy.cpu.hl == 0x1000)
     #expect(gameBoy.cpu.a == 0x01)
 }
 
-@Test func registerField6MeansTheByteAtHLNotTheFlagsRegister() {
+@Test func registerField6MeansTheByteAtHLNotTheFlagsRegister() throws {
     // LD B, (HL) / LD (HL), A / ADD A, (HL) / INC (HL) / CB: SET 0, (HL)
-    let gameBoy = makeGameBoy(program: [0x46, 0x77, 0x86, 0x34, 0xCB, 0xC6])
+    let gameBoy = try makeGameBoy(program: [0x46, 0x77, 0x86, 0x34, 0xCB, 0xC6])
     gameBoy.cpu.hl = 0xC000
     gameBoy.cpu.a = 0x10
     gameBoy.cpu.f = 0xF0
     gameBoy.memory[0xC000] = 0x42
 
-    #expect(gameBoy.cpu.step() == 8)
+    #expect(try gameBoy.cpu.step() == 8)
     #expect(gameBoy.cpu.b == 0x42)
 
-    #expect(gameBoy.cpu.step() == 8)
+    #expect(try gameBoy.cpu.step() == 8)
     #expect(gameBoy.memory[0xC000] == 0x10)
 
-    #expect(gameBoy.cpu.step() == 8)
+    #expect(try gameBoy.cpu.step() == 8)
     #expect(gameBoy.cpu.a == 0x20)
 
-    #expect(gameBoy.cpu.step() == 12)
+    #expect(try gameBoy.cpu.step() == 12)
     #expect(gameBoy.memory[0xC000] == 0x11)
 
-    #expect(gameBoy.cpu.step() == 16)
+    #expect(try gameBoy.cpu.step() == 16)
     #expect(gameBoy.memory[0xC000] == 0x11) // Bit 0 was already set
 }
 
-@Test func popAFKeepsTheLowerFlagBitsZero() {
-    let gameBoy = makeGameBoy(program: [0xC5, 0xF1]) // PUSH BC, POP AF
+@Test func popAFKeepsTheLowerFlagBitsZero() throws {
+    let gameBoy = try makeGameBoy(program: [0xC5, 0xF1]) // PUSH BC, POP AF
     gameBoy.cpu.bc = 0x12FF
-    _ = gameBoy.cpu.step()
-    _ = gameBoy.cpu.step()
+    _ = try gameBoy.cpu.step()
+    _ = try gameBoy.cpu.step()
 
     #expect(gameBoy.cpu.a == 0x12)
     #expect(gameBoy.cpu.f == 0xF0)
@@ -70,23 +70,23 @@ private func makeGameBoy(program: [UInt8] = []) -> GameBoy {
 
 // MARK: - Interrupts
 
-@Test func enablingInterruptsDoesNotTouchTheIERegister() {
-    let gameBoy = makeGameBoy(program: [0xFB, 0x00, 0xF3]) // EI, NOP, DI
+@Test func enablingInterruptsDoesNotTouchTheIERegister() throws {
+    let gameBoy = try makeGameBoy(program: [0xFB, 0x00, 0xF3]) // EI, NOP, DI
     gameBoy.memory[0xFF0F] = 0
     gameBoy.memory[0xFFFF] = 0x05
-    for _ in 0..<3 { _ = gameBoy.cpu.step() }
+    for _ in 0..<3 { _ = try gameBoy.cpu.step() }
 
     #expect(gameBoy.memory[0xFFFF] == 0x05)
 }
 
-@Test func pendingInterruptPushesPCAndJumpsToItsVector() {
-    let gameBoy = makeGameBoy()
+@Test func pendingInterruptPushesPCAndJumpsToItsVector() throws {
+    let gameBoy = try makeGameBoy()
     gameBoy.cpu.isInterruptMasterEnabled = true
     gameBoy.cpu.sp = 0xDFFE
     gameBoy.memory[0xFFFF] = 0x04 // Only the timer interrupt is enabled
     gameBoy.memory[0xFF0F] = 0x05 // VBlank and timer are both requested
 
-    let cycles = gameBoy.cpu.step()
+    let cycles = try gameBoy.cpu.step()
 
     #expect(cycles == 20)
     #expect(gameBoy.cpu.pc == 0x0050) // Timer vector, VBlank was not enabled
@@ -97,31 +97,31 @@ private func makeGameBoy(program: [UInt8] = []) -> GameBoy {
     #expect(!gameBoy.cpu.isInterruptMasterEnabled)
 }
 
-@Test func haltSleepsUntilAnInterruptIsRequested() {
-    let gameBoy = makeGameBoy(program: [0x76, 0x3C]) // HALT, INC A
+@Test func haltSleepsUntilAnInterruptIsRequested() throws {
+    let gameBoy = try makeGameBoy(program: [0x76, 0x3C]) // HALT, INC A
     gameBoy.memory[0xFF0F] = 0
     gameBoy.memory[0xFFFF] = 0x01
     gameBoy.cpu.a = 0
 
-    for _ in 0..<10 { _ = gameBoy.cpu.step() }
+    for _ in 0..<10 { _ = try gameBoy.cpu.step() }
     #expect(gameBoy.cpu.isClockHalted)
     #expect(gameBoy.cpu.a == 0)
 
     gameBoy.memory[0xFF0F] = 0x01
-    _ = gameBoy.cpu.step()
+    _ = try gameBoy.cpu.step()
     #expect(!gameBoy.cpu.isClockHalted)
     #expect(gameBoy.cpu.a == 1)
 }
 
 // MARK: - Memory
 
-@Test func writingToROMSwitchesBanksInsteadOfChangingTheROM() {
+@Test func writingToROMSwitchesBanksInsteadOfChangingTheROM() throws {
     var rom = [UInt8](repeating: 0, count: 4 * 0x4000)
     rom[0x147] = 0x01 // MBC1
     for bank in 0..<4 { rom[bank * 0x4000 + 0x10] = UInt8(bank) }
 
     let memory = GameBoyMemory()
-    memory.loadCartridge(data: Data(rom))
+    try memory.loadCartridge(data: Data(rom))
     #expect(memory[0x4010] == 1)
 
     memory[0x2000] = 3
@@ -133,12 +133,12 @@ private func makeGameBoy(program: [UInt8] = []) -> GameBoy {
     #expect(memory[0x4010] == 1)
 }
 
-@Test func cartridgeRAMSurvivesBeingSavedAndLoadedAgain() {
+@Test func cartridgeRAMSurvivesBeingSavedAndLoadedAgain() throws {
     var rom = [UInt8](repeating: 0, count: 4 * 0x4000)
     rom[0x147] = 0x13 // MBC3 with RAM and battery
 
     let memory = GameBoyMemory()
-    memory.loadCartridge(data: Data(rom))
+    try memory.loadCartridge(data: Data(rom))
     #expect(memory.hasBattery)
     #expect(!memory.hasUnsavedExternalRam)
 
@@ -148,7 +148,7 @@ private func makeGameBoy(program: [UInt8] = []) -> GameBoy {
     #expect(memory.hasUnsavedExternalRam)
 
     let restored = GameBoyMemory()
-    restored.loadCartridge(data: Data(rom), save: Data(memory.externalRam))
+    try restored.loadCartridge(data: Data(rom), save: Data(memory.externalRam))
 
     #expect(!restored.hasUnsavedExternalRam)
     #expect(restored[0xA000] == 0x11)
@@ -156,7 +156,7 @@ private func makeGameBoy(program: [UInt8] = []) -> GameBoy {
     #expect(restored[0xBFFF] == 0x22)
 }
 
-@Test func dmaTransferCopiesSpriteDataIntoOAM() {
+@Test func dmaTransferCopiesSpriteDataIntoOAM() throws {
     let memory = GameBoyMemory()
     memory[0xC000] = 0xAA
     memory[0xC09F] = 0xBB
@@ -166,12 +166,12 @@ private func makeGameBoy(program: [UInt8] = []) -> GameBoy {
     #expect(memory[0xFE9F] == 0xBB)
 }
 
-@Test func joypadReadsPressedButtonsAsZeroBits() {
-    let gameBoy = makeGameBoy()
+@Test func joypadReadsPressedButtonsAsZeroBits() throws {
+    let gameBoy = try makeGameBoy()
     #expect(gameBoy.memory[0xFF00] & 0x0F == 0x0F) // Nothing pressed
 
-    gameBoy.joypad.startButtonPressed = true
-    gameBoy.joypad.dPadState = .left
+    gameBoy.memory.joypad.startButtonPressed = true
+    gameBoy.memory.joypad.dPadState = .left
 
     gameBoy.memory[0xFF00] = 0x10 // Select the action buttons
     #expect(gameBoy.memory[0xFF00] & 0x0F == 0b0111)
@@ -182,7 +182,7 @@ private func makeGameBoy(program: [UInt8] = []) -> GameBoy {
 
 // MARK: - Timer
 
-@Test func timerOverflowReloadsAndRequestsTheTimerInterrupt() {
+@Test func timerOverflowReloadsAndRequestsTheTimerInterrupt() throws {
     let memory = GameBoyMemory()
     memory[0xFF0F] = 0
     memory[0xFF04] = 0    // Reset DIV
@@ -201,8 +201,8 @@ private func makeGameBoy(program: [UInt8] = []) -> GameBoy {
 
 // MARK: - PPU
 
-@Test func ppuReportsItsScanlineAndRequestsVBlank() {
-    let gameBoy = makeGameBoy()
+@Test func ppuReportsItsScanlineAndRequestsVBlank() throws {
+    let gameBoy = try makeGameBoy()
     gameBoy.memory[0xFF0F] = 0
 
     gameBoy.ppu.step(cycles: 456)
@@ -220,23 +220,23 @@ private func makeGameBoy(program: [UInt8] = []) -> GameBoy {
     #expect(gameBoy.memory[0xFF0F] & 0x01 != 0)
 }
 
-@Test func ppuDrawsBackgroundTilesThroughThePalette() {
-    let gameBoy = makeGameBoy()
+@Test func ppuDrawsBackgroundTilesThroughThePalette() throws {
+    let gameBoy = try makeGameBoy()
     gameBoy.memory[0xFF40] = 0x91 // LCD on, tile data at 0x8000, background on
     gameBoy.memory[0xFF47] = 0b00_01_10_11 // Palette that inverts the color numbers
     gameBoy.memory[0x9800] = 1 // Top-left tile of the map is tile 1
     gameBoy.memory[0x8010] = 0b1000_0000 // Tile 1, first row: leftmost pixel has color number 1...
     gameBoy.memory[0x8011] = 0b0100_0000 // ...and the second pixel has color number 2
 
-    gameBoy.runFrame()
+    try gameBoy.runFrame()
 
     #expect(gameBoy.ppu.displayBuffer[0] == 2)
     #expect(gameBoy.ppu.displayBuffer[1] == 1)
     #expect(gameBoy.ppu.displayBuffer[2] == 3) // Color number 0
 }
 
-@Test func ppuDrawsSprites() {
-    let gameBoy = makeGameBoy()
+@Test func ppuDrawsSprites() throws {
+    let gameBoy = try makeGameBoy()
     gameBoy.memory[0xFF40] = 0x93 // LCD on, background on, sprites on
     gameBoy.memory[0xFF47] = 0x00 // Background is all color 0
     gameBoy.memory[0xFF48] = 0b11_10_01_00
@@ -247,7 +247,7 @@ private func makeGameBoy(program: [UInt8] = []) -> GameBoy {
     gameBoy.memory[0xFE02] = 1
     gameBoy.memory[0xFE03] = 0x40 // Flipped vertically, so tile row 0 lands on the sprite's last row
 
-    gameBoy.runFrame()
+    try gameBoy.runFrame()
 
     #expect(gameBoy.ppu.displayBuffer[2 * 160 + 4] == 0)
     #expect(gameBoy.ppu.displayBuffer[9 * 160 + 4] == 3)
@@ -264,7 +264,7 @@ private func run(_ apu: GameBoyAPU, seconds: Double) {
     }
 }
 
-@Test func pulseChannelPlaysASquareWaveAtTheRequestedPitch() {
+@Test func pulseChannelPlaysASquareWaveAtTheRequestedPitch() throws {
     let apu = GameBoyAPU()
     apu[0xFF25] = 0x22 // Pulse 2 to both speakers
     apu[0xFF16] = 0x80 // 50% duty
@@ -284,7 +284,7 @@ private func run(_ apu: GameBoyAPU, seconds: Double) {
     #expect(left.max()! > 0.05)
 }
 
-@Test func lengthCounterSwitchesTheChannelOff() {
+@Test func lengthCounterSwitchesTheChannelOff() throws {
     let apu = GameBoyAPU()
     apu[0xFF17] = 0xF0
     apu[0xFF16] = 0x3C // Length 64 - 60 = 4 ticks of 1/256 s
@@ -297,7 +297,7 @@ private func run(_ apu: GameBoyAPU, seconds: Double) {
     #expect(apu[0xFF26] & 0x02 == 0)
 }
 
-@Test func envelopeFadesANoteOut() {
+@Test func envelopeFadesANoteOut() throws {
     let apu = GameBoyAPU()
     apu[0xFF25] = 0x22
     apu[0xFF16] = 0x80
@@ -317,7 +317,7 @@ private func run(_ apu: GameBoyAPU, seconds: Double) {
     #expect(apu.pendingSamples.map(abs).max()! < 0.001)
 }
 
-@Test func waveAndNoiseChannelsProduceSound() {
+@Test func waveAndNoiseChannelsProduceSound() throws {
     let apu = GameBoyAPU()
     apu[0xFF25] = 0x44 // Wave channel only
     for address in 0xFF30...0xFF3F {
@@ -339,7 +339,7 @@ private func run(_ apu: GameBoyAPU, seconds: Double) {
     #expect(apu.pendingSamples.map(abs).max()! > 0.05)
 }
 
-@Test func poweringTheAPUOffClearsItsRegisters() {
+@Test func poweringTheAPUOffClearsItsRegisters() throws {
     let apu = GameBoyAPU()
     apu[0xFF17] = 0xF0
     apu[0xFF19] = 0x80
@@ -352,6 +352,58 @@ private func run(_ apu: GameBoyAPU, seconds: Double) {
     #expect(apu[0xFF17] == 0x00)
 }
 
+// MARK: - Emulator
+
+@Test func emulatorDeliversFramesUntilItsConsumerStops() async throws {
+    let emulator = Emulator()
+    var frames = 0
+
+    // Leaving the loop ends the stream, which is what stops the emulation
+    for try await frame in emulator.run(rom: Data(count: 0x8000), saveURL: nil) {
+        #expect(frame.count == displayBufferWidth * displayBufferHeight)
+        frames += 1
+        if frames == 3 {
+            break
+        }
+    }
+
+    #expect(frames == 3)
+}
+
+// MARK: - Errors
+
+@Test func runningIntoANonexistentOpcodeThrows() throws {
+    let gameBoy = try makeGameBoy(program: [0x00, 0xDD]) // NOP, then an opcode that doesn't exist
+    _ = try gameBoy.cpu.step()
+
+    #expect(throws: GameBoyError.invalidInstruction(opcode: 0xDD, address: 0x0101)) {
+        try gameBoy.cpu.step()
+    }
+}
+
+@Test func loadingSomethingThatIsNotASupportedROMThrows() throws {
+    let memory = GameBoyMemory()
+
+    #expect(throws: GameBoyError.invalidROM) {
+        try memory.loadCartridge(data: Data(count: 16))
+    }
+
+    var rom = [UInt8](repeating: 0, count: 0x8000)
+    rom[0x147] = 0x19 // MBC5
+    #expect(throws: GameBoyError.unsupportedCartridge(type: 0x19)) {
+        try memory.loadCartridge(data: Data(rom))
+    }
+}
+
+@Test func emulatorEndsItsStreamWithTheErrorThatStoppedIt() async {
+    var rom = [UInt8](repeating: 0, count: 0x8000)
+    rom[0x100] = 0xDD
+
+    await #expect(throws: GameBoyError.invalidInstruction(opcode: 0xDD, address: 0x0100)) {
+        for try await _ in Emulator().run(rom: Data(rom), saveURL: nil) {}
+    }
+}
+
 // MARK: - Test ROMs
 
 /// Blargg's cpu_instrs exercises every instruction and reports the result over the link cable.
@@ -361,12 +413,12 @@ private func run(_ apu: GameBoyAPU, seconds: Double) {
 func cpuInstructionTestROMPasses() throws {
     let gameBoy = GameBoy()
     let url = try #require(Bundle.main.url(forResource: "cpu_instrs", withExtension: "gb"))
-    gameBoy.memory.loadCartridge(data: try Data(contentsOf: url))
+    try gameBoy.memory.loadCartridge(data: try Data(contentsOf: url))
 
     var output = ""
     var cycles = 0
     while !output.contains("Passed all tests") && !output.contains("Failed") && cycles < 400_000_000 {
-        cycles += gameBoy.step().cycles
+        cycles += try gameBoy.step().cycles
         if !gameBoy.memory.serialOutput.isEmpty {
             output += String(decoding: gameBoy.memory.serialOutput, as: UTF8.self)
             gameBoy.memory.serialOutput.removeAll()

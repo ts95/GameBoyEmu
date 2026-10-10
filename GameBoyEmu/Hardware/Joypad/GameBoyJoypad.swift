@@ -15,10 +15,14 @@ enum DPadState {
     case right
 }
 
-protocol GameBoyJoypad: AnyObject {
-    var dPadState: DPadState { get set }
-    var aButtonPressed: Bool { get set }
-    var bButtonPressed: Bool { get set }
-    var startButtonPressed: Bool { get set }
-    var selectButtonPressed: Bool { get set }
+/// Which buttons are held down right now.
+///
+/// A plain value rather than a shared object: the UI owns one copy on the main actor and
+/// sends a new copy to the emulator whenever it changes, so the two never touch the same memory.
+struct JoypadState: Equatable, Sendable {
+    var dPadState = DPadState.idle
+    var aButtonPressed = false
+    var bButtonPressed = false
+    var startButtonPressed = false
+    var selectButtonPressed = false
 }

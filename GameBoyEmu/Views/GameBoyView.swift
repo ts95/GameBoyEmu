@@ -9,9 +9,12 @@ import SwiftUI
 import SwiftData
 
 struct GameBoyView: View {
-    // @StateObject keeps one GameBoy alive for the lifetime of the view. With @ObservedObject
-    // a new one is created every time SwiftUI re-creates the view struct.
-    @StateObject var gameBoy = GameBoy()
+    // @State keeps one model alive for the lifetime of the view
+    @State private var model = GameBoyViewModel()
+
+    /// The bundled ROM to run, without its extension. `nil` shows the console switched off.
+    // var rom: String? = "cpu_instrs"
+    var rom: String? = "pokemon_red"
     @FocusState private var isFocused: Bool
     @GestureState private var dPadState = DPadState.idle
 
@@ -37,7 +40,7 @@ struct GameBoyView: View {
     var canvas: some View {
         // Color 0 is the lightest shade and 3 the darkest
         let shades: [UInt8] = [0xE6, 0xB3, 0x4D, 0x00]
-        let pixels = Data(gameBoy.frame.map { shades[Int($0)] })
+        let pixels = Data(model.frame.map { shades[Int($0)] })
 
         if let provider = CGDataProvider(data: pixels as CFData),
            let image = CGImage(width: displayBufferWidth,
@@ -100,7 +103,7 @@ struct GameBoyView: View {
                 }
         )
         .onChange(of: dPadState) { _, newState in
-            gameBoy.joypad.dPadState = newState
+            model.joypad.dPadState = newState
         }
     }
 
@@ -128,8 +131,8 @@ struct GameBoyView: View {
 
     var actionButtons: some View {
         HStack(spacing: 16) {
-            actionButton("B") { gameBoy.joypad.bButtonPressed = $0 }
-            actionButton("A") { gameBoy.joypad.aButtonPressed = $0 }
+            actionButton("B") { model.joypad.bButtonPressed = $0 }
+            actionButton("A") { model.joypad.aButtonPressed = $0 }
         }
         .rotationEffect(.degrees(-20))
         .font(.title.bold())
@@ -150,8 +153,8 @@ struct GameBoyView: View {
 
     var optionButtons: some View {
         HStack(spacing: 16) {
-            optionButton("Select") { gameBoy.joypad.selectButtonPressed = $0 }
-            optionButton("Start") { gameBoy.joypad.startButtonPressed = $0 }
+            optionButton("Select") { model.joypad.selectButtonPressed = $0 }
+            optionButton("Start") { model.joypad.startButtonPressed = $0 }
         }
         .font(.title3.bold())
         .foregroundStyle(.primary)
@@ -168,6 +171,17 @@ struct GameBoyView: View {
         .rotationEffect(.degrees(-5))
     }
 
+    /// Shows the alert while the model has an error, and clears the error when it is dismissed.
+    var isShowingError: Binding<Bool> {
+        Binding {
+            model.error != nil
+        } set: { isShowing in
+            if !isShowing {
+                model.error = nil
+            }
+        }
+    }
+
     var body: some View {
         VStack {
             screen
@@ -181,30 +195,19 @@ struct GameBoyView: View {
         .focusable()
         .focusEffectDisabled()
         .focused($isFocused)
-        .onKeyPress(phases: [.down, .up], action: gameBoy.joypad.onKeyPress)
+        .onKeyPress(phases: [.down, .up]) { model.joypad.handle($0) }
         .onAppear {
             isFocused = true
         }
         .task {
-            await startGameBoy()
-        }
-    }
-
-    func startGameBoy() async {
-        let rom = "pokemon_red"
-        // let rom = "cpu_instrs"
-        // let rom = "cpu_instrs"
-        if let url = Bundle.main.url(forResource: rom, withExtension: "gb") {
-            do {
-                let romData = try Data(contentsOf: url)
-                // Saves live in the app's own container, as <rom>.sav
-                let saveURL = URL.applicationSupportDirectory.appending(path: "\(rom).sav")
-                await gameBoy.start(withROM: romData, saveURL: saveURL)
-            } catch {
-                print(error)
+            if let rom {
+                await model.run(romNamed: rom)
             }
-        } else {
-            print("Couldn't find ROM")
+        }
+        .alert(isPresented: isShowingError, error: model.error) { _ in
+            Button("OK") {}
+        } message: { error in
+            Text(error.recoverySuggestion ?? "")
         }
     }
 }
@@ -225,6 +228,7 @@ struct JoypadButtonStyle: ButtonStyle {
     }
 }
 
+// No ROM: the preview only draws the console, it doesn't run a game
 #Preview {
-    GameBoyView()
+    GameBoyView(rom: nil)
 }

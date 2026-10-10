@@ -95,7 +95,7 @@ class GameBoyMemory: AddressBusProtocol {
     let apu = GameBoyAPU()
 
     /// The buttons, readable through 0xFF00.
-    var joypad: GameBoyJoypad?
+    var joypad = JoypadState()
 
     /// Every byte the game has sent over the link cable. Test ROMs print their results this way.
     var serialOutput: [UInt8] = []
@@ -259,7 +259,19 @@ class GameBoyMemory: AddressBusProtocol {
     /// - Parameters:
     ///   - data: The cartridge ROM.
     ///   - save: The contents of the cartridge RAM from an earlier session, if any.
-    func loadCartridge(data: Data, save: Data? = nil) {
+    /// - Throws: `GameBoyError` if the data isn't a ROM this emulator can run.
+    func loadCartridge(data: Data, save: Data? = nil) throws {
+        // The cartridge header, which says what hardware the cartridge has, ends at 0x014F
+        guard data.count >= 0x150 else {
+            throw GameBoyError.invalidROM
+        }
+        // No bank controller, MBC1 or MBC3. Anything else would run with the wrong banking
+        // and crash in confusing ways, so it is refused up front.
+        let type = data[data.startIndex + 0x147]
+        guard [0x00, 0x08, 0x09].contains(type) || (0x01...0x03).contains(type) || (0x0F...0x13).contains(type) else {
+            throw GameBoyError.unsupportedCartridge(type: type)
+        }
+
         cartridgeData = [UInt8](data)
         if let save {
             externalRam.replaceSubrange(0..<min(save.count, externalRam.count), with: save.prefix(externalRam.count))
@@ -305,22 +317,20 @@ class GameBoyMemory: AddressBusProtocol {
         let select = ioPorts[0] & 0x30
         var pressed: UInt8 = 0
 
-        if let joypad {
-            if select & 0x10 == 0 {
-                switch joypad.dPadState {
-                case .right: pressed |= 0x01
-                case .left:  pressed |= 0x02
-                case .up:    pressed |= 0x04
-                case .down:  pressed |= 0x08
-                case .idle:  break
-                }
+        if select & 0x10 == 0 {
+            switch joypad.dPadState {
+            case .right: pressed |= 0x01
+            case .left:  pressed |= 0x02
+            case .up:    pressed |= 0x04
+            case .down:  pressed |= 0x08
+            case .idle:  break
             }
-            if select & 0x20 == 0 {
-                if joypad.aButtonPressed { pressed |= 0x01 }
-                if joypad.bButtonPressed { pressed |= 0x02 }
-                if joypad.selectButtonPressed { pressed |= 0x04 }
-                if joypad.startButtonPressed { pressed |= 0x08 }
-            }
+        }
+        if select & 0x20 == 0 {
+            if joypad.aButtonPressed { pressed |= 0x01 }
+            if joypad.bButtonPressed { pressed |= 0x02 }
+            if joypad.selectButtonPressed { pressed |= 0x04 }
+            if joypad.startButtonPressed { pressed |= 0x08 }
         }
 
         return 0xC0 | select | (~pressed & 0x0F)

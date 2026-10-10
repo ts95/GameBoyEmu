@@ -8,14 +8,9 @@
 import Foundation
 import SwiftUI
 
-class KeyboardJoypad: GameBoyJoypad {
-    var dPadState = DPadState.idle
-    var aButtonPressed = false
-    var bButtonPressed = false
-    var startButtonPressed = false
-    var selectButtonPressed = false
-
-    func onKeyPress(_ keyPress: KeyPress) -> KeyPress.Result {
+extension JoypadState {
+    /// Keyboard controls: WASD = d-pad, J = A, K = B, Z = Select, X = Start.
+    mutating func handle(_ keyPress: KeyPress) -> KeyPress.Result {
         switch keyPress.key {
         case .init("w"):
             dPadState = keyPress.phase == .down ? .up : .idle

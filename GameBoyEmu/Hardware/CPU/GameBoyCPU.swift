@@ -226,7 +226,10 @@ class GameBoyCPU<AddressBus: AddressBusProtocol> {
 
     /// Runs one instruction (or services one interrupt, or idles while halted)
     /// and returns how many T cycles that took.
-    func step() -> Int {
+    ///
+    /// - Throws: `GameBoyError.invalidInstruction` if the program runs into one of the
+    ///   opcodes that don't exist. Real hardware locks up when that happens.
+    func step() throws -> Int {
         // IE (0xFFFF) says which interrupts the game wants, IF (0xFF0F) says which ones
         // the hardware has requested. An interrupt is pending when a bit is set in both.
         let pendingInterrupts = addressBus[0xFFFF] & addressBus[0xFF0F] & 0x1F
@@ -257,9 +260,9 @@ class GameBoyCPU<AddressBus: AddressBusProtocol> {
         let instruction: CPUInstruction
 
         if opcode == 0xCB {
-            instruction = getInstruction(opcode: fetchByte(), isCBPrefixed: true)
+            instruction = try getInstruction(opcode: fetchByte(), isCBPrefixed: true)
         } else {
-            instruction = getInstruction(opcode: opcode)
+            instruction = try getInstruction(opcode: opcode)
         }
 
         let tCycles = execute(instruction: instruction)
@@ -1256,7 +1259,7 @@ class GameBoyCPU<AddressBus: AddressBusProtocol> {
         }
     }
 
-    func getInstruction(opcode: UInt8, isCBPrefixed: Bool = false) -> CPUInstruction {
+    func getInstruction(opcode: UInt8, isCBPrefixed: Bool = false) throws -> CPUInstruction {
         if isCBPrefixed {
             switch opcode {
             case 0x06:
@@ -1538,7 +1541,7 @@ class GameBoyCPU<AddressBus: AddressBusProtocol> {
             case 0x00:
                 return .noOperation
             default:
-                fatalError("Unsupported opcode: \(String(format: "%02X", opcode))")
+                throw GameBoyError.invalidInstruction(opcode: opcode, address: pc &- 1)
             }
         }
     }
