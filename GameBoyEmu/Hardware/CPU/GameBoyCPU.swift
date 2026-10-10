@@ -16,37 +16,36 @@ enum FlagBit: UInt8 {
 
 /// Swift implementation of the custom 8-bit Sharp LR35902 processor of the Game Boy.
 /// The processor operates at approximately 4.19 MHz and uses the little endian layout.
-class GameBoyCPU<AddressBus: AddressBusProtocol>: ObservableObject {
+class GameBoyCPU<AddressBus: AddressBusProtocol> {
 
     // MARK: CPU state
 
-    @Published var isClockHalted = false
-    @Published var isClockStopped = false
-    @Published var isInterruptMasterEnabled = false {
-        didSet {
-            addressBus[0xFFFF] = isInterruptMasterEnabled ? 1 : 0
-        }
-    }
+    var isClockHalted = false
+    /// The IME flag. It lives inside the CPU and is not visible anywhere in memory.
+    /// It is a different thing from the IE register at 0xFFFF, which selects *which*
+    /// interrupts are allowed; IME is the master switch for all of them.
+    var isInterruptMasterEnabled = false
 
     // MARK: General-purpose registers
+    // The initial values are what the boot ROM leaves behind on an original Game Boy.
 
     /// Accumulator register
-    var a: UInt8 = 0
-    var b: UInt8 = 0
-    var c: UInt8 = 0
-    var d: UInt8 = 0
-    var e: UInt8 = 0
+    var a: UInt8 = 0x01
+    var b: UInt8 = 0x00
+    var c: UInt8 = 0x13
+    var d: UInt8 = 0x00
+    var e: UInt8 = 0xD8
     /// Flags register
-    var f: UInt8 = 0
-    var h: UInt8 = 0
-    var l: UInt8 = 0
+    var f: UInt8 = 0xB0
+    var h: UInt8 = 0x01
+    var l: UInt8 = 0x4D
 
     // MARK: Special-purpose registers
 
     /// Stack pointer
-    @Published var sp: UInt16 = 0xFFFE
+    var sp: UInt16 = 0xFFFE
     /// Program counter
-    @Published var pc: UInt16 = 0x0100
+    var pc: UInt16 = 0x0100
 
     // MARK: Combined registers (16-bit register pairs)
 
@@ -113,7 +112,7 @@ class GameBoyCPU<AddressBus: AddressBusProtocol>: ObservableObject {
         case .E: e = value
         case .H: h = value
         case .L: l = value
-        case .F: f = value
+        case .F: f = value & 0xF0 // The low 4 bits of F don't exist in hardware and always read 0
         }
     }
 
@@ -187,12 +186,24 @@ class GameBoyCPU<AddressBus: AddressBusProtocol>: ObservableObject {
         }
     }
 
+    func fetchByte() -> UInt8 {
+        let value = addressBus[Int(pc)]
+        pc &+= 1
+        return value
+    }
+
     func fetchWord() -> UInt16 {
-        let low = addressBus[Int(pc)]
-        pc += 1
-        let high = addressBus[Int(pc)]
-        pc += 1
+        let low = fetchByte()
+        let high = fetchByte()
         return UInt16(high) << 8 | UInt16(low)
+    }
+
+    /// The flag results shared by ADD HL, ss and ADD HL, SP.
+    func addToHL(_ value: UInt16) {
+        clear(flag: .subtraction)
+        ((hl & 0xFFF) + (value & 0xFFF)) > 0xFFF ? set(flag: .halfCarry) : clear(flag: .halfCarry)
+        (UInt32(hl) + UInt32(value)) > 0xFFFF ? set(flag: .carry) : clear(flag: .carry)
+        hl = hl &+ value
     }
 
     func pushWord(_ value: UInt16) {
@@ -210,61 +221,57 @@ class GameBoyCPU<AddressBus: AddressBusProtocol>: ObservableObject {
         return UInt16(high) << 8 | UInt16(low)
     }
 
-    func step() -> Int {
-        let opcode = addressBus[Int(pc)]
-        pc += 1
+    /// EI only takes effect after the instruction that follows it.
+    private var isInterruptEnablePending = false
 
+    /// Runs one instruction (or services one interrupt, or idles while halted)
+    /// and returns how many T cycles that took.
+    func step() -> Int {
+        // IE (0xFFFF) says which interrupts the game wants, IF (0xFF0F) says which ones
+        // the hardware has requested. An interrupt is pending when a bit is set in both.
+        let pendingInterrupts = addressBus[0xFFFF] & addressBus[0xFF0F] & 0x1F
+
+        if pendingInterrupts != 0 {
+            // A pending interrupt always wakes the CPU from HALT, even when IME is off.
+            isClockHalted = false
+
+            if isInterruptMasterEnabled {
+                // Lowest bit has the highest priority: VBlank, LCD STAT, Timer, Serial, Joypad.
+                let bit = pendingInterrupts.trailingZeroBitCount
+                addressBus[0xFF0F] &= ~(1 << UInt8(bit)) // Acknowledge the request
+                isInterruptMasterEnabled = false // Prevent nested interrupts until RETI/EI
+                pushWord(pc)
+                pc = 0x0040 + UInt16(bit) * 8 // Vectors are 0x40, 0x48, 0x50, 0x58, 0x60
+                return 20
+            }
+        }
+
+        if isClockHalted {
+            return 4 // The CPU is asleep, but time still passes for the PPU and timer
+        }
+
+        let enableInterruptsAfterThisInstruction = isInterruptEnablePending
+        isInterruptEnablePending = false
+
+        let opcode = fetchByte()
         let instruction: CPUInstruction
 
         if opcode == 0xCB {
-            let cbOpcode = addressBus[Int(pc)]
-            pc += 1
-
-            instruction = getInstruction(opcode: cbOpcode, isCBPrefixed: true)
+            instruction = getInstruction(opcode: fetchByte(), isCBPrefixed: true)
         } else {
             instruction = getInstruction(opcode: opcode)
         }
 
         let tCycles = execute(instruction: instruction)
 
-        print("\(UInt64(Date().timeIntervalSince1970 * 100_000)): executed \(instruction)")
-
-        handleInterrupts()
+        if enableInterruptsAfterThisInstruction {
+            isInterruptMasterEnabled = true
+        }
 
         return tCycles
     }
-    
-    func handleInterrupts() {
-        if isInterruptMasterEnabled {
-            let ie = addressBus[0xFFFF]
-            let ifr = addressBus[0xFF0F]
-            let pendingInterrupts = ie & ifr
-
-            if pendingInterrupts != 0 {
-                // There is a pending interrupt
-                if pendingInterrupts & 0x01 != 0 {
-                    // VBlank interrupt is requested
-                    addressBus[0xFF0F] &= ~0x01 // Clear the VBlank interrupt flag
-                    serviceInterrupt(address: 0x0040) // VBlank interrupt vector address
-                }
-            }
-        }
-    }
-
-    func serviceInterrupt(address: UInt16) {
-        addressBus[Int(sp) - 1] = UInt8((pc >> 8) & 0xFF)
-        addressBus[Int(sp) - 2] = UInt8(pc & 0xFF)
-        // Set the new program counter to the interrupt vector
-        pc = address
-        // Disable interrupts to prevent nested interrupts
-        isInterruptMasterEnabled = false
-    }
 
     func execute(instruction: CPUInstruction) -> Int {
-        guard !isClockHalted else {
-            return 4
-        }
-
         switch instruction {
         case .loadRegister(let dest, let src):
             setRegister(dest, to: getRegister(src))
@@ -272,7 +279,7 @@ class GameBoyCPU<AddressBus: AddressBusProtocol>: ObservableObject {
 
         case .loadRegisterFromImmediate(let dest):
             let value = addressBus[Int(pc)]
-            pc += 1
+            pc &+= 1
             setRegister(dest, to: value)
             return instruction.cycles.count()
 
@@ -291,7 +298,7 @@ class GameBoyCPU<AddressBus: AddressBusProtocol>: ObservableObject {
         case .loadAddressHLFromImmediate:
             let address = hl
             let value = addressBus[Int(pc)]
-            pc += 1
+            pc &+= 1
             addressBus[Int(address)] = value
             return instruction.cycles.count()
 
@@ -333,34 +340,34 @@ class GameBoyCPU<AddressBus: AddressBusProtocol>: ObservableObject {
 
         case .loadAFromAddressFF00PlusN:
             let address = 0xFF00 + UInt16(addressBus[Int(pc)])
-            pc += 1
+            pc &+= 1
             a = addressBus[Int(address)]
             return instruction.cycles.count()
 
         case .loadAddressFF00PlusNFromA:
             let address = 0xFF00 + UInt16(addressBus[Int(pc)])
-            pc += 1
+            pc &+= 1
             addressBus[Int(address)] = a
             return instruction.cycles.count()
 
         case .loadAFromAddressHLAndDecrement:
             a = addressBus[Int(hl)]
-            hl -= 1
+            hl &-= 1
             return instruction.cycles.count()
 
         case .loadAddressHLAndDecrementFromA:
             addressBus[Int(hl)] = a
-            hl -= 1
+            hl &-= 1
             return instruction.cycles.count()
 
         case .loadAFromAddressHLAndIncrement:
             a = addressBus[Int(hl)]
-            hl += 1
+            hl &+= 1
             return instruction.cycles.count()
 
         case .loadAddressHLAndIncrementFromA:
             addressBus[Int(hl)] = a
-            hl += 1
+            hl &+= 1
             return instruction.cycles.count()
 
         case .loadRegisterPairFromImmediate(let high, let low):
@@ -368,10 +375,14 @@ class GameBoyCPU<AddressBus: AddressBusProtocol>: ObservableObject {
             setRegisterPair(high, low, to: value)
             return instruction.cycles.count()
 
+        case .loadSPFromImmediate:
+            sp = fetchWord()
+            return instruction.cycles.count()
+
         case .loadAddressNNFromSP:
             let address = fetchWord()
             addressBus[Int(address)] = UInt8(sp & 0xFF)
-            addressBus[Int(address + 1)] = UInt8((sp >> 8) & 0xFF)
+            addressBus[Int(address &+ 1)] = UInt8((sp >> 8) & 0xFF)
             return instruction.cycles.count()
 
         case .loadSPFromHL:
@@ -388,7 +399,7 @@ class GameBoyCPU<AddressBus: AddressBusProtocol>: ObservableObject {
 
         case .loadHLFromSPPlusE:
             let offset = Int8(bitPattern: addressBus[Int(pc)])
-            pc += 1
+            pc &+= 1
             let result = Int(sp) + Int(offset)
             clear(flag: .zero)
             clear(flag: .subtraction)
@@ -417,7 +428,7 @@ class GameBoyCPU<AddressBus: AddressBusProtocol>: ObservableObject {
 
         case .addAWithImmediate:
             let value = addressBus[Int(pc)]
-            pc += 1
+            pc &+= 1
             addToA(value)
             return instruction.cycles.count()
 
@@ -433,7 +444,7 @@ class GameBoyCPU<AddressBus: AddressBusProtocol>: ObservableObject {
 
         case .addAWithCarryImmediate:
             let value = addressBus[Int(pc)]
-            pc += 1
+            pc &+= 1
             addToA(value, withCarry: true)
             return instruction.cycles.count()
 
@@ -449,7 +460,7 @@ class GameBoyCPU<AddressBus: AddressBusProtocol>: ObservableObject {
 
         case .subtractAWithImmediate:
             let value = addressBus[Int(pc)]
-            pc += 1
+            pc &+= 1
             subFromA(value)
             return instruction.cycles.count()
 
@@ -465,7 +476,7 @@ class GameBoyCPU<AddressBus: AddressBusProtocol>: ObservableObject {
 
         case .subtractAWithCarryImmediate:
             let value = addressBus[Int(pc)]
-            pc += 1
+            pc &+= 1
             subFromA(value, withCarry: true)
             return instruction.cycles.count()
 
@@ -481,7 +492,7 @@ class GameBoyCPU<AddressBus: AddressBusProtocol>: ObservableObject {
 
         case .compareAWithImmediate:
             let value = addressBus[Int(pc)]
-            pc += 1
+            pc &+= 1
             compareA(with: value)
             return instruction.cycles.count()
 
@@ -583,7 +594,7 @@ class GameBoyCPU<AddressBus: AddressBusProtocol>: ObservableObject {
 
         case .bitwiseAndWithImmediate:
             let value = addressBus[Int(pc)]
-            pc += 1
+            pc &+= 1
             a &= value
             if a == 0 {
                 set(flag: .zero)
@@ -623,7 +634,7 @@ class GameBoyCPU<AddressBus: AddressBusProtocol>: ObservableObject {
 
         case .bitwiseOrWithImmediate:
             let value = addressBus[Int(pc)]
-            pc += 1
+            pc &+= 1
             a |= value
             if a == 0 {
                 set(flag: .zero)
@@ -663,7 +674,7 @@ class GameBoyCPU<AddressBus: AddressBusProtocol>: ObservableObject {
 
         case .bitwiseXorWithImmediate:
             let value = addressBus[Int(pc)]
-            pc += 1
+            pc &+= 1
             a ^= value
             if a == 0 {
                 set(flag: .zero)
@@ -730,25 +741,24 @@ class GameBoyCPU<AddressBus: AddressBusProtocol>: ObservableObject {
             return instruction.cycles.count()
 
         case .addHLWithRegisterPair(let high, let low):
-            let value = getRegisterPair(high, low)
-            let result = hl &+ value
-            clear(flag: .subtraction)
-            if ((hl & 0xFFF) + (value & 0xFFF)) > 0xFFF {
-                set(flag: .halfCarry)
-            } else {
-                clear(flag: .halfCarry)
-            }
-            if (UInt32(hl) + UInt32(value)) > 0xFFFF {
-                set(flag: .carry)
-            } else {
-                clear(flag: .carry)
-            }
-            hl = result
+            addToHL(getRegisterPair(high, low))
+            return instruction.cycles.count()
+
+        case .incrementSP:
+            sp &+= 1
+            return instruction.cycles.count()
+
+        case .decrementSP:
+            sp &-= 1
+            return instruction.cycles.count()
+
+        case .addHLWithSP:
+            addToHL(sp)
             return instruction.cycles.count()
 
         case .addSPWithE:
             let offset = Int8(bitPattern: addressBus[Int(pc)])
-            pc += 1
+            pc &+= 1
             let result = Int(sp) + Int(offset)
             clear(flag: .zero)
             clear(flag: .subtraction)
@@ -773,11 +783,7 @@ class GameBoyCPU<AddressBus: AddressBusProtocol>: ObservableObject {
             } else {
                 clear(flag: .carry)
             }
-            if a == 0 {
-                set(flag: .zero)
-            } else {
-                clear(flag: .zero)
-            }
+            clear(flag: .zero) // Unlike the CB-prefixed rotates, these always clear Z
             clear(flag: .subtraction)
             clear(flag: .halfCarry)
             return instruction.cycles.count()
@@ -790,11 +796,7 @@ class GameBoyCPU<AddressBus: AddressBusProtocol>: ObservableObject {
             } else {
                 clear(flag: .carry)
             }
-            if a == 0 {
-                set(flag: .zero)
-            } else {
-                clear(flag: .zero)
-            }
+            clear(flag: .zero) // Unlike the CB-prefixed rotates, these always clear Z
             clear(flag: .subtraction)
             clear(flag: .halfCarry)
             return instruction.cycles.count()
@@ -807,11 +809,7 @@ class GameBoyCPU<AddressBus: AddressBusProtocol>: ObservableObject {
             } else {
                 clear(flag: .carry)
             }
-            if a == 0 {
-                set(flag: .zero)
-            } else {
-                clear(flag: .zero)
-            }
+            clear(flag: .zero) // Unlike the CB-prefixed rotates, these always clear Z
             clear(flag: .subtraction)
             clear(flag: .halfCarry)
             return instruction.cycles.count()
@@ -824,11 +822,7 @@ class GameBoyCPU<AddressBus: AddressBusProtocol>: ObservableObject {
             } else {
                 clear(flag: .carry)
             }
-            if a == 0 {
-                set(flag: .zero)
-            } else {
-                clear(flag: .zero)
-            }
+            clear(flag: .zero) // Unlike the CB-prefixed rotates, these always clear Z
             clear(flag: .subtraction)
             clear(flag: .halfCarry)
             return instruction.cycles.count()
@@ -1038,7 +1032,7 @@ class GameBoyCPU<AddressBus: AddressBusProtocol>: ObservableObject {
             } else {
                 clear(flag: .zero)
             }
-            set(flag: .subtraction)
+            clear(flag: .subtraction)
             clear(flag: .halfCarry)
             return instruction.cycles.count()
 
@@ -1057,7 +1051,7 @@ class GameBoyCPU<AddressBus: AddressBusProtocol>: ObservableObject {
             } else {
                 clear(flag: .zero)
             }
-            set(flag: .subtraction)
+            clear(flag: .subtraction)
             clear(flag: .halfCarry)
             return instruction.cycles.count()
 
@@ -1190,12 +1184,12 @@ class GameBoyCPU<AddressBus: AddressBusProtocol>: ObservableObject {
             }
 
         case .relativeJump(let offset):
-            pc = UInt16(Int(pc) + Int(offset))
+            pc = pc &+ UInt16(bitPattern: Int16(offset))
             return instruction.cycles.count()
 
         case .relativeJumpConditional(let condition, let offset):
             if checkCondition(condition) {
-                pc = UInt16(Int(pc) + Int(offset))
+                pc = pc &+ UInt16(bitPattern: Int16(offset))
                 return instruction.cycles.count(conditionMet: true)
             } else {
                 return instruction.cycles.count()
@@ -1243,17 +1237,18 @@ class GameBoyCPU<AddressBus: AddressBusProtocol>: ObservableObject {
             return instruction.cycles.count()
 
         case .stopSystemAndMainClocks:
-            // Stops both the system clock and the main clock
-            isClockStopped = true
+            // ponytail: STOP is treated as a 2-byte NOP. Real hardware sleeps until a button
+            // is pressed; emulate that if a game turns out to rely on it.
+            pc &+= 1
             return instruction.cycles.count()
 
         case .disableInterrupts:
-            isClockHalted = false
+            isInterruptEnablePending = false
             isInterruptMasterEnabled = false
             return instruction.cycles.count()
 
         case .enableInterrupts:
-            isInterruptMasterEnabled = true
+            isInterruptEnablePending = true
             return instruction.cycles.count()
 
         case .noOperation:
@@ -1264,61 +1259,71 @@ class GameBoyCPU<AddressBus: AddressBusProtocol>: ObservableObject {
     func getInstruction(opcode: UInt8, isCBPrefixed: Bool = false) -> CPUInstruction {
         if isCBPrefixed {
             switch opcode {
-            case 0x00...0x07:
-                return .rotateLeftCircularRegister(CPURegister(rawValue: opcode & 0x07)!)
             case 0x06:
                 return .rotateLeftCircularAddressHL
-            case 0x08...0x0F:
-                return .rotateRightCircularRegister(CPURegister(rawValue: opcode & 0x07)!)
+            case 0x00...0x07:
+                return .rotateLeftCircularRegister(CPURegister(rawValue: opcode & 0x07)!)
             case 0x0E:
                 return .rotateRightCircularAddressHL
-            case 0x10...0x17:
-                return .rotateLeftRegister(CPURegister(rawValue: opcode & 0x07)!)
+            case 0x08...0x0F:
+                return .rotateRightCircularRegister(CPURegister(rawValue: opcode & 0x07)!)
             case 0x16:
                 return .rotateLeftAddressHL
-            case 0x18...0x1F:
-                return .rotateRightRegister(CPURegister(rawValue: opcode & 0x07)!)
+            case 0x10...0x17:
+                return .rotateLeftRegister(CPURegister(rawValue: opcode & 0x07)!)
             case 0x1E:
                 return .rotateRightAddressHL
-            case 0x20...0x27:
-                return .shiftLeftArithmeticRegister(CPURegister(rawValue: opcode & 0x07)!)
+            case 0x18...0x1F:
+                return .rotateRightRegister(CPURegister(rawValue: opcode & 0x07)!)
             case 0x26:
                 return .shiftLeftArithmeticAddressHL
-            case 0x28...0x2F:
-                return .shiftRightArithmeticRegister(CPURegister(rawValue: opcode & 0x07)!)
+            case 0x20...0x27:
+                return .shiftLeftArithmeticRegister(CPURegister(rawValue: opcode & 0x07)!)
             case 0x2E:
                 return .shiftRightArithmeticAddressHL
-            case 0x30...0x37:
-                return .swapNibblesRegister(CPURegister(rawValue: opcode & 0x07)!)
+            case 0x28...0x2F:
+                return .shiftRightArithmeticRegister(CPURegister(rawValue: opcode & 0x07)!)
             case 0x36:
                 return .swapNibblesAddressHL
-            case 0x38...0x3F:
-                return .shiftRightLogicalRegister(CPURegister(rawValue: opcode & 0x07)!)
+            case 0x30...0x37:
+                return .swapNibblesRegister(CPURegister(rawValue: opcode & 0x07)!)
             case 0x3E:
                 return .shiftRightLogicalAddressHL
-            case 0x40...0x7F:
-                let bit = (opcode >> 3) & 0x07
-                return .testBitRegister(bit, CPURegister(rawValue: opcode & 0x07)!)
+            case 0x38...0x3F:
+                return .shiftRightLogicalRegister(CPURegister(rawValue: opcode & 0x07)!)
             case 0x46, 0x4E, 0x56, 0x5E, 0x66, 0x6E, 0x76, 0x7E:
                 let bit = (opcode >> 3) & 0x07
                 return .testBitAddressHL(bit)
-            case 0x80...0xBF:
+            case 0x40...0x7F:
                 let bit = (opcode >> 3) & 0x07
-                return .resetBitRegister(bit, CPURegister(rawValue: opcode & 0x07)!)
+                return .testBitRegister(bit, CPURegister(rawValue: opcode & 0x07)!)
             case 0x86, 0x8E, 0x96, 0x9E, 0xA6, 0xAE, 0xB6, 0xBE:
                 let bit = (opcode >> 3) & 0x07
                 return .resetBitAddressHL(bit)
-            case 0xC0...0xFF:
+            case 0x80...0xBF:
                 let bit = (opcode >> 3) & 0x07
-                return .setBitRegister(bit, CPURegister(rawValue: opcode & 0x07)!)
+                return .resetBitRegister(bit, CPURegister(rawValue: opcode & 0x07)!)
             case 0xC6, 0xCE, 0xD6, 0xDE, 0xE6, 0xEE, 0xF6, 0xFE:
                 let bit = (opcode >> 3) & 0x07
                 return .setBitAddressHL(bit)
+            case 0xC0...0xFF:
+                let bit = (opcode >> 3) & 0x07
+                return .setBitRegister(bit, CPURegister(rawValue: opcode & 0x07)!)
             default:
                 fatalError("Unsupported CB-prefixed opcode: \(String(format: "%02X", opcode))")
             }
         } else {
+            // Swift runs the FIRST case that matches, so every opcode whose register field is
+            // 0b110 ("the byte at HL") has to be listed before the range that contains it.
             switch opcode {
+            case 0x76:
+                return .haltSystemClock
+            case 0x46, 0x4E, 0x56, 0x5E, 0x66, 0x6E, 0x7E:
+                let register = CPURegister(rawValue: (opcode >> 3) & 0x07)!
+                return .loadRegisterFromAddressHL(register)
+            case 0x70...0x75, 0x77:
+                let register = CPURegister(rawValue: opcode & 0x07)!
+                return .loadAddressHLFromRegister(register)
             case 0x40...0x7F:
                 let dest = CPURegister(rawValue: (opcode >> 3) & 0x07)!
                 let src = CPURegister(rawValue: opcode & 0x07)!
@@ -1326,12 +1331,6 @@ class GameBoyCPU<AddressBus: AddressBusProtocol>: ObservableObject {
             case 0x06, 0x0E, 0x16, 0x1E, 0x26, 0x2E, 0x3E:
                 let register = CPURegister(rawValue: (opcode >> 3) & 0x07)!
                 return .loadRegisterFromImmediate(register)
-            case 0x46, 0x4E, 0x56, 0x5E, 0x66, 0x6E, 0x7E:
-                let register = CPURegister(rawValue: (opcode >> 3) & 0x07)!
-                return .loadRegisterFromAddressHL(register)
-            case 0x70...0x75:
-                let register = CPURegister(rawValue: opcode & 0x07)!
-                return .loadAddressHLFromRegister(register)
             case 0x36:
                 return .loadAddressHLFromImmediate
             case 0x0A:
@@ -1369,7 +1368,7 @@ class GameBoyCPU<AddressBus: AddressBusProtocol>: ObservableObject {
             case 0x21:
                 return .loadRegisterPairFromImmediate(.H, .L)
             case 0x31:
-                return .loadRegisterPairFromImmediate(.A, .F)
+                return .loadSPFromImmediate
             case 0x08:
                 return .loadAddressNNFromSP
             case 0xF9:
@@ -1392,34 +1391,34 @@ class GameBoyCPU<AddressBus: AddressBusProtocol>: ObservableObject {
                 return .popRegisterPair(.A, .F)
             case 0xF8:
                 return .loadHLFromSPPlusE
-            case 0x80...0x87:
-                return .addAWithRegister(CPURegister(rawValue: opcode & 0x07)!)
             case 0x86:
                 return .addAWithAddressHL
+            case 0x80...0x87:
+                return .addAWithRegister(CPURegister(rawValue: opcode & 0x07)!)
             case 0xC6:
                 return .addAWithImmediate
-            case 0x88...0x8F:
-                return .addAWithCarryRegister(CPURegister(rawValue: opcode & 0x07)!)
             case 0x8E:
                 return .addAWithCarryAddressHL
+            case 0x88...0x8F:
+                return .addAWithCarryRegister(CPURegister(rawValue: opcode & 0x07)!)
             case 0xCE:
                 return .addAWithCarryImmediate
-            case 0x90...0x97:
-                return .subtractAWithRegister(CPURegister(rawValue: opcode & 0x07)!)
             case 0x96:
                 return .subtractAWithAddressHL
+            case 0x90...0x97:
+                return .subtractAWithRegister(CPURegister(rawValue: opcode & 0x07)!)
             case 0xD6:
                 return .subtractAWithImmediate
-            case 0x98...0x9F:
-                return .subtractAWithCarryRegister(CPURegister(rawValue: opcode & 0x07)!)
             case 0x9E:
                 return .subtractAWithCarryAddressHL
+            case 0x98...0x9F:
+                return .subtractAWithCarryRegister(CPURegister(rawValue: opcode & 0x07)!)
             case 0xDE:
                 return .subtractAWithCarryImmediate
-            case 0xB8...0xBF:
-                return .compareAWithRegister(CPURegister(rawValue: opcode & 0x07)!)
             case 0xBE:
                 return .compareAWithAddressHL
+            case 0xB8...0xBF:
+                return .compareAWithRegister(CPURegister(rawValue: opcode & 0x07)!)
             case 0xFE:
                 return .compareAWithImmediate
             case 0x04, 0x0C, 0x14, 0x1C, 0x24, 0x2C, 0x3C:
@@ -1432,22 +1431,22 @@ class GameBoyCPU<AddressBus: AddressBusProtocol>: ObservableObject {
                 return .decrementRegister(register)
             case 0x35:
                 return .decrementAddressHL
-            case 0xA0...0xA7:
-                return .bitwiseAndWithRegister(CPURegister(rawValue: opcode & 0x07)!)
             case 0xA6:
                 return .bitwiseAndWithAddressHL
+            case 0xA0...0xA7:
+                return .bitwiseAndWithRegister(CPURegister(rawValue: opcode & 0x07)!)
             case 0xE6:
                 return .bitwiseAndWithImmediate
-            case 0xB0...0xB7:
-                return .bitwiseOrWithRegister(CPURegister(rawValue: opcode & 0x07)!)
             case 0xB6:
                 return .bitwiseOrWithAddressHL
+            case 0xB0...0xB7:
+                return .bitwiseOrWithRegister(CPURegister(rawValue: opcode & 0x07)!)
             case 0xF6:
                 return .bitwiseOrWithImmediate
-            case 0xA8...0xAF:
-                return .bitwiseXorWithRegister(CPURegister(rawValue: opcode & 0x07)!)
             case 0xAE:
                 return .bitwiseXorWithAddressHL
+            case 0xA8...0xAF:
+                return .bitwiseXorWithRegister(CPURegister(rawValue: opcode & 0x07)!)
             case 0xEE:
                 return .bitwiseXorWithImmediate
             case 0x3F:
@@ -1465,7 +1464,7 @@ class GameBoyCPU<AddressBus: AddressBusProtocol>: ObservableObject {
             case 0x23:
                 return .incrementRegisterPair(.H, .L)
             case 0x33:
-                return .incrementRegisterPair(.A, .F)
+                return .incrementSP
             case 0x0B:
                 return .decrementRegisterPair(.B, .C)
             case 0x1B:
@@ -1473,7 +1472,7 @@ class GameBoyCPU<AddressBus: AddressBusProtocol>: ObservableObject {
             case 0x2B:
                 return .decrementRegisterPair(.H, .L)
             case 0x3B:
-                return .decrementRegisterPair(.A, .F)
+                return .decrementSP
             case 0x09:
                 return .addHLWithRegisterPair(.B, .C)
             case 0x19:
@@ -1481,7 +1480,7 @@ class GameBoyCPU<AddressBus: AddressBusProtocol>: ObservableObject {
             case 0x29:
                 return .addHLWithRegisterPair(.H, .L)
             case 0x39:
-                return .addHLWithRegisterPair(.A, .F)
+                return .addHLWithSP
             case 0xE8:
                 return .addSPWithE
             case 0x07:
@@ -1494,31 +1493,31 @@ class GameBoyCPU<AddressBus: AddressBusProtocol>: ObservableObject {
                 return .rotateRightAccumulator
             case 0xC3:
                 let address = UInt16(addressBus[Int(pc)]) | (UInt16(addressBus[Int(pc) + 1]) << 8)
-                pc += 2
+                pc &+= 2
                 return .jump(address)
             case 0xE9:
                 return .jumpToHL
             case 0xC2, 0xCA, 0xD2, 0xDA:
                 let address = UInt16(addressBus[Int(pc)]) | (UInt16(addressBus[Int(pc) + 1]) << 8)
-                pc += 2
+                pc &+= 2
                 let condition = JumpCondition(rawValue: (opcode >> 3) & 0x03)!
                 return .jumpConditional(condition, address)
             case 0x18:
                 let offset = Int8(bitPattern: addressBus[Int(pc)])
-                pc += 1
+                pc &+= 1
                 return .relativeJump(offset)
             case 0x20, 0x28, 0x30, 0x38:
                 let offset = Int8(bitPattern: addressBus[Int(pc)])
-                pc += 1
+                pc &+= 1
                 let condition = JumpCondition(rawValue: (opcode >> 3) & 0x03)!
                 return .relativeJumpConditional(condition, offset)
             case 0xCD:
                 let address = UInt16(addressBus[Int(pc)]) | (UInt16(addressBus[Int(pc) + 1]) << 8)
-                pc += 2
+                pc &+= 2
                 return .callFunction(address)
             case 0xC4, 0xCC, 0xD4, 0xDC:
                 let address = UInt16(addressBus[Int(pc)]) | (UInt16(addressBus[Int(pc) + 1]) << 8)
-                pc += 2
+                pc &+= 2
                 let condition = JumpCondition(rawValue: (opcode >> 3) & 0x03)!
                 return .callFunctionConditional(condition, address)
             case 0xC9:
@@ -1530,8 +1529,6 @@ class GameBoyCPU<AddressBus: AddressBusProtocol>: ObservableObject {
                 return .returnFromInterruptHandler
             case 0xC7, 0xCF, 0xD7, 0xDF, 0xE7, 0xEF, 0xF7, 0xFF:
                 return .restartCallFunction(opcode & 0x38)
-            case 0x76:
-                return .haltSystemClock
             case 0x10:
                 return .stopSystemAndMainClocks
             case 0xF3:

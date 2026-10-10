@@ -52,6 +52,14 @@ extension CPUInstruction: CustomDebugStringConvertible {
 
         case .loadRegisterPairFromImmediate(let reg1, let reg2):
             return "LD \(reg1)\(reg2), nn"
+        case .loadSPFromImmediate:
+            return "LD SP, nn"
+        case .incrementSP:
+            return "INC SP"
+        case .decrementSP:
+            return "DEC SP"
+        case .addHLWithSP:
+            return "ADD HL, SP"
         case .loadAddressNNFromSP:
             return "LD (nn), SP"
         case .loadSPFromHL:

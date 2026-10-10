@@ -14,7 +14,10 @@ enum CPURegister: UInt8 {
     case E = 0b011
     case H = 0b100
     case L = 0b101
-    case F = 0b110 // Flags register
+    /// Flags register. Note that in an opcode's 3-bit register field, 0b110 does NOT mean F,
+    /// it means "the byte at address HL". The decoder must pick the `...AddressHL` instruction
+    /// for those opcodes; F is only ever reached through PUSH AF / POP AF.
+    case F = 0b110
     case A = 0b111 // Accumulator register
 }
 
@@ -92,6 +95,8 @@ enum CPUInstruction {
 
     /// LD dd, nn
     case loadRegisterPairFromImmediate(CPURegister, CPURegister)
+    /// LD SP, nn
+    case loadSPFromImmediate
     /// LD (nn), SP
     case loadAddressNNFromSP
     /// LD SP, HL
@@ -178,6 +183,12 @@ enum CPUInstruction {
     case decrementRegisterPair(CPURegister, CPURegister)
     /// ADD HL, ss
     case addHLWithRegisterPair(CPURegister, CPURegister)
+    /// INC SP
+    case incrementSP
+    /// DEC SP
+    case decrementSP
+    /// ADD HL, SP
+    case addHLWithSP
     /// ADD SP, e
     case addSPWithE
 
@@ -275,25 +286,83 @@ enum CPUInstruction {
     case noOperation
     
     var cycles: TCycles {
+        // Rule of thumb: every byte the CPU reads or writes on the bus (opcode bytes included)
+        // costs 4 T cycles, plus 4 extra for some 16-bit work. No `default` on purpose, so the
+        // compiler forces a decision for every instruction.
         switch self {
-        case .noOperation:
-            return .constant(4)
+        // 8-bit loads
         case .loadRegister:
             return .constant(4)
-        case .loadRegisterFromImmediate:
+        case .loadRegisterFromImmediate, .loadRegisterFromAddressHL, .loadAddressHLFromRegister:
             return .constant(8)
+        case .loadAddressHLFromImmediate:
+            return .constant(12)
         case .loadAFromAddressBC, .loadAFromAddressDE, .loadAddressBCFromA, .loadAddressDEFromA:
             return .constant(8)
         case .loadAFromAddressNN, .loadAddressNNFromA:
             return .constant(16)
-        case .addAWithRegister, .subtractAWithRegister, .compareAWithRegister:
+        case .loadAFromAddressFF00PlusC, .loadAddressFF00PlusCFromA:
+            return .constant(8)
+        case .loadAFromAddressFF00PlusN, .loadAddressFF00PlusNFromA:
+            return .constant(12)
+        case .loadAFromAddressHLAndDecrement, .loadAddressHLAndDecrementFromA,
+             .loadAFromAddressHLAndIncrement, .loadAddressHLAndIncrementFromA:
+            return .constant(8)
+
+        // 16-bit loads
+        case .loadRegisterPairFromImmediate, .loadSPFromImmediate:
+            return .constant(12)
+        case .loadAddressNNFromSP:
+            return .constant(20)
+        case .loadSPFromHL:
+            return .constant(8)
+        case .pushRegisterPair:
+            return .constant(16)
+        case .popRegisterPair, .loadHLFromSPPlusE:
+            return .constant(12)
+
+        // 8-bit arithmetic and logic
+        case .addAWithRegister, .addAWithCarryRegister, .subtractAWithRegister, .subtractAWithCarryRegister,
+             .compareAWithRegister, .bitwiseAndWithRegister, .bitwiseOrWithRegister, .bitwiseXorWithRegister,
+             .incrementRegister, .decrementRegister:
             return .constant(4)
-        case .addAWithImmediate, .subtractAWithImmediate, .compareAWithImmediate:
+        case .addAWithAddressHL, .addAWithCarryAddressHL, .subtractAWithAddressHL, .subtractAWithCarryAddressHL,
+             .compareAWithAddressHL, .bitwiseAndWithAddressHL, .bitwiseOrWithAddressHL, .bitwiseXorWithAddressHL:
             return .constant(8)
-        case .addAWithAddressHL, .subtractAWithAddressHL, .compareAWithAddressHL:
+        case .addAWithImmediate, .addAWithCarryImmediate, .subtractAWithImmediate, .subtractAWithCarryImmediate,
+             .compareAWithImmediate, .bitwiseAndWithImmediate, .bitwiseOrWithImmediate, .bitwiseXorWithImmediate:
             return .constant(8)
+        case .incrementAddressHL, .decrementAddressHL:
+            return .constant(12)
+        case .complementCarryFlag, .setCarryFlag, .decimalAdjustAccumulator, .complementAccumulator:
+            return .constant(4)
+
+        // 16-bit arithmetic
+        case .incrementRegisterPair, .decrementRegisterPair, .incrementSP, .decrementSP,
+             .addHLWithRegisterPair, .addHLWithSP:
+            return .constant(8)
+        case .addSPWithE:
+            return .constant(16)
+
+        // Rotates, shifts and bit operations (the CB-prefixed ones include the prefix byte)
+        case .rotateLeftCircularAccumulator, .rotateLeftAccumulator, .rotateRightCircularAccumulator, .rotateRightAccumulator:
+            return .constant(4)
+        case .rotateLeftCircularRegister, .rotateRightCircularRegister, .rotateLeftRegister, .rotateRightRegister,
+             .shiftLeftArithmeticRegister, .shiftRightArithmeticRegister, .swapNibblesRegister, .shiftRightLogicalRegister,
+             .testBitRegister, .resetBitRegister, .setBitRegister:
+            return .constant(8)
+        case .rotateLeftCircularAddressHL, .rotateRightCircularAddressHL, .rotateLeftAddressHL, .rotateRightAddressHL,
+             .shiftLeftArithmeticAddressHL, .shiftRightArithmeticAddressHL, .swapNibblesAddressHL, .shiftRightLogicalAddressHL,
+             .resetBitAddressHL, .setBitAddressHL:
+            return .constant(16)
+        case .testBitAddressHL:
+            return .constant(12)
+
+        // Control flow
         case .jump:
             return .constant(16)
+        case .jumpToHL:
+            return .constant(4)
         case .jumpConditional:
             return .variable(min: 12, max: 16)
         case .relativeJump:
@@ -304,22 +373,14 @@ enum CPUInstruction {
             return .constant(24)
         case .callFunctionConditional:
             return .variable(min: 12, max: 24)
-        case .returnFromFunction:
+        case .returnFromFunction, .returnFromInterruptHandler, .restartCallFunction:
             return .constant(16)
         case .returnFromFunctionConditional:
             return .variable(min: 8, max: 20)
-        case .returnFromInterruptHandler:
-            return .constant(16)
-        case .pushRegisterPair:
-            return .constant(16)
-        case .popRegisterPair:
-            return .constant(12)
-        case .rotateLeftCircularAccumulator, .rotateLeftAccumulator, .rotateRightCircularAccumulator, .rotateRightAccumulator:
+
+        // Miscellaneous
+        case .haltSystemClock, .stopSystemAndMainClocks, .disableInterrupts, .enableInterrupts, .noOperation:
             return .constant(4)
-        case .haltSystemClock, .stopSystemAndMainClocks:
-            return .constant(4)
-        default:
-            return .constant(4) // Default cycle count for unspecified instructions
         }
     }
 }
