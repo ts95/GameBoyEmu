@@ -28,6 +28,16 @@ final class GameBoyViewModel {
         }
     }
 
+    /// Whether the sound is switched off. Changes are forwarded to the emulator.
+    var isMuted = false {
+        didSet {
+            guard isMuted != oldValue else { return }
+            Task { [emulator, isMuted] in
+                await emulator.setMuted(isMuted)
+            }
+        }
+    }
+
     private let emulator = Emulator()
 
     /// The problem to tell the player about, if any. Set back to `nil` once it has been shown.

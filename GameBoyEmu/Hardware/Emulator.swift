@@ -16,11 +16,18 @@ import Foundation
 /// - button presses go in through `setJoypad(_:)`
 actor Emulator {
     private let gameBoy = GameBoy()
+    private var isMuted = false
 
     /// Updates which buttons are held down. Takes effect at the next frame boundary, when
     /// the emulation loop is suspended and the actor is free to run this.
     func setJoypad(_ state: JoypadState) {
         gameBoy.memory.joypad = state
+    }
+
+    /// Mutes or unmutes the sound. Muting shuts the audio engine down altogether, and
+    /// unmuting starts a new one; both happen at the next frame boundary.
+    func setMuted(_ isMuted: Bool) {
+        self.isMuted = isMuted
     }
 
     /// Starts the emulation and returns its frames, one array of colors (0-3) per frame.
@@ -64,14 +71,9 @@ actor Emulator {
     ) async throws {
         try gameBoy.memory.loadCartridge(data: rom, save: readSave(from: saveURL))
 
-        // No sound is not a reason to refuse to play
-        let audio: AudioOutput?
-        do {
-            audio = try AudioOutput()
-        } catch {
-            audio = nil
-            onWarning(.audioUnavailable(reason: error.localizedDescription))
-        }
+        // The audio engine only exists while there is sound to play
+        var audio: AudioOutput?
+        var hasAudioFailed = false
 
         let frameDuration = Duration.seconds(Double(GameBoy.cyclesPerFrame) / GameBoyClock.frequency)
         var nextFrame = ContinuousClock.now
@@ -84,6 +86,20 @@ actor Emulator {
             try gameBoy.runFrame()
             frames.yield(gameBoy.ppu.displayBuffer)
 
+            if isMuted {
+                // Dropping the output stops its engine. The APU itself keeps running, because
+                // games read its registers, but its samples are thrown away.
+                audio = nil
+                hasAudioFailed = false
+            } else if audio == nil && !hasAudioFailed {
+                do {
+                    audio = try AudioOutput()
+                } catch {
+                    // No sound is not a reason to stop playing. Unmuting tries again.
+                    hasAudioFailed = true
+                    onWarning(.audioUnavailable(reason: error.localizedDescription))
+                }
+            }
             audio?.play(samples: gameBoy.memory.apu.pendingSamples)
             gameBoy.memory.apu.pendingSamples.removeAll(keepingCapacity: true)
 

@@ -60,6 +60,20 @@ struct GameBoyView: View {
         }
     }
 
+    var muteButton: some View {
+        Button {
+            model.isMuted.toggle()
+        } label: {
+            Image(systemName: model.isMuted ? "speaker.slash.fill" : "speaker.wave.2.fill")
+                .font(.title3)
+                .frame(width: 44, height: 32)
+                .contentTransition(.symbolEffect(.replace))
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(.secondary)
+        .accessibilityLabel(model.isMuted ? "Unmute" : "Mute")
+    }
+
     var joypad: some View {
         VStack(spacing: 64) {
             HStack {
@@ -185,6 +199,8 @@ struct GameBoyView: View {
     var body: some View {
         VStack {
             screen
+            muteButton
+                .frame(maxWidth: .infinity, alignment: .trailing)
             Spacer()
             joypad
             Spacer()

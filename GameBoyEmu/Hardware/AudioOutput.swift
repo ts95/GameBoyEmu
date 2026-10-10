@@ -36,6 +36,13 @@ final class AudioOutput {
         player.play()
     }
 
+    deinit {
+        // Letting go of the output switches the sound hardware off, rather than leaving
+        // an engine running with nothing to play
+        player.stop()
+        engine.stop()
+    }
+
     /// Queues samples for playback.
     ///
     /// - Parameter samples: Interleaved left/right samples between -1 and 1.
