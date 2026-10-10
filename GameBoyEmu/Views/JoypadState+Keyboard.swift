@@ -1,5 +1,5 @@
 //
-//  KeyboardJoypad.swift
+//  JoypadState+Keyboard.swift
 //  GameBoyEmu
 //
 //  Created by Toni Sucic on 03/07/2024.

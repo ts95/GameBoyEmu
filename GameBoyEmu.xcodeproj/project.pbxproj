@@ -10,8 +10,8 @@
 		E22BEDCF2C34A2200061C4D2 /* GameBoyCPU.swift in Sources */ = {isa = PBXBuildFile; fileRef = E22BEDCE2C34A2200061C4D2 /* GameBoyCPU.swift */; };
 		E22BEDD32C34BFA10061C4D2 /* GameBoyMemory.swift in Sources */ = {isa = PBXBuildFile; fileRef = E22BEDD22C34BFA10061C4D2 /* GameBoyMemory.swift */; };
 		E22BEDD52C34C7090061C4D2 /* GameBoyPPU.swift in Sources */ = {isa = PBXBuildFile; fileRef = E22BEDD42C34C7090061C4D2 /* GameBoyPPU.swift */; };
-		E22BEDD72C34CAAB0061C4D2 /* GameBoyJoypad.swift in Sources */ = {isa = PBXBuildFile; fileRef = E22BEDD62C34CAAB0061C4D2 /* GameBoyJoypad.swift */; };
-		E22BEDDA2C354DBA0061C4D2 /* KeyboardJoypad.swift in Sources */ = {isa = PBXBuildFile; fileRef = E22BEDD92C354DBA0061C4D2 /* KeyboardJoypad.swift */; };
+		E22BEDD72C34CAAB0061C4D2 /* JoypadState.swift in Sources */ = {isa = PBXBuildFile; fileRef = E22BEDD62C34CAAB0061C4D2 /* JoypadState.swift */; };
+		E22BEDDA2C354DBA0061C4D2 /* JoypadState+Keyboard.swift in Sources */ = {isa = PBXBuildFile; fileRef = E22BEDD92C354DBA0061C4D2 /* JoypadState+Keyboard.swift */; };
 		E22BEDDD2C3C16C40061C4D2 /* CPUInstruction.swift in Sources */ = {isa = PBXBuildFile; fileRef = E22BEDDC2C3C16C40061C4D2 /* CPUInstruction.swift */; };
 		E23D5465307ADA770004A0DC /* GameBoyAPU.swift in Sources */ = {isa = PBXBuildFile; fileRef = E23D5464307ADA770004A0DC /* GameBoyAPU.swift */; };
 		E23D5467307ADA770004A0DC /* AudioOutput.swift in Sources */ = {isa = PBXBuildFile; fileRef = E23D5466307ADA770004A0DC /* AudioOutput.swift */; };
@@ -28,7 +28,6 @@
 		E2443AA72C3D475B00113A62 /* GameBoyClock.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2443AA62C3D475B00113A62 /* GameBoyClock.swift */; };
 		E2443AAC2C3D820E00113A62 /* cpu_instrs.gb in Resources */ = {isa = PBXBuildFile; fileRef = E2443AAB2C3D820E00113A62 /* cpu_instrs.gb */; };
 		E2443AAE2C3DE52D00113A62 /* interrupt_time.gb in Resources */ = {isa = PBXBuildFile; fileRef = E2443AAD2C3DE52D00113A62 /* interrupt_time.gb */; };
-		E2443AB02C3DE97A00113A62 /* InterruptFlags.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2443AAF2C3DE97A00113A62 /* InterruptFlags.swift */; };
 		E2674EAA2C281FA500EE0206 /* GameBoyEmuApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2674EA92C281FA500EE0206 /* GameBoyEmuApp.swift */; };
 		E2674EAC2C281FA500EE0206 /* GameBoyView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2674EAB2C281FA500EE0206 /* GameBoyView.swift */; };
 		E2674EB02C281FA600EE0206 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = E2674EAF2C281FA600EE0206 /* Assets.xcassets */; };
@@ -49,8 +48,8 @@
 		E22BEDCE2C34A2200061C4D2 /* GameBoyCPU.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GameBoyCPU.swift; sourceTree = "<group>"; };
 		E22BEDD22C34BFA10061C4D2 /* GameBoyMemory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GameBoyMemory.swift; sourceTree = "<group>"; };
 		E22BEDD42C34C7090061C4D2 /* GameBoyPPU.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GameBoyPPU.swift; sourceTree = "<group>"; };
-		E22BEDD62C34CAAB0061C4D2 /* GameBoyJoypad.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GameBoyJoypad.swift; sourceTree = "<group>"; };
-		E22BEDD92C354DBA0061C4D2 /* KeyboardJoypad.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyboardJoypad.swift; sourceTree = "<group>"; };
+		E22BEDD62C34CAAB0061C4D2 /* JoypadState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JoypadState.swift; sourceTree = "<group>"; };
+		E22BEDD92C354DBA0061C4D2 /* JoypadState+Keyboard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "JoypadState+Keyboard.swift"; sourceTree = "<group>"; };
 		E22BEDDC2C3C16C40061C4D2 /* CPUInstruction.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CPUInstruction.swift; sourceTree = "<group>"; };
 		E23D545B307AD77A0004A0DC /* GameBoyEmuTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = GameBoyEmuTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		E23D5464307ADA770004A0DC /* GameBoyAPU.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GameBoyAPU.swift; sourceTree = "<group>"; };
@@ -68,7 +67,6 @@
 		E2443AA62C3D475B00113A62 /* GameBoyClock.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GameBoyClock.swift; sourceTree = "<group>"; };
 		E2443AAB2C3D820E00113A62 /* cpu_instrs.gb */ = {isa = PBXFileReference; lastKnownFileType = file; path = cpu_instrs.gb; sourceTree = "<group>"; };
 		E2443AAD2C3DE52D00113A62 /* interrupt_time.gb */ = {isa = PBXFileReference; lastKnownFileType = file; path = interrupt_time.gb; sourceTree = "<group>"; };
-		E2443AAF2C3DE97A00113A62 /* InterruptFlags.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InterruptFlags.swift; sourceTree = "<group>"; };
 		E2674EA62C281FA500EE0206 /* GameBoyEmu.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = GameBoyEmu.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		E2674EA92C281FA500EE0206 /* GameBoyEmuApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GameBoyEmuApp.swift; sourceTree = "<group>"; };
 		E2674EAB2C281FA500EE0206 /* GameBoyView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GameBoyView.swift; sourceTree = "<group>"; };
@@ -102,29 +100,17 @@
 		E22BEDCD2C34A1D00061C4D2 /* Hardware */ = {
 			isa = PBXGroup;
 			children = (
-				E22BEDD82C354DAE0061C4D2 /* Joypad */,
 				E22BEDDB2C3C16BB0061C4D2 /* CPU */,
 				E22BEDD42C34C7090061C4D2 /* GameBoyPPU.swift */,
 				E22BEDD22C34BFA10061C4D2 /* GameBoyMemory.swift */,
 				E2443AA62C3D475B00113A62 /* GameBoyClock.swift */,
 				E2443A9B2C3CA5DB00113A62 /* GameBoy.swift */,
-				E2443AAF2C3DE97A00113A62 /* InterruptFlags.swift */,
 				E23D5464307ADA770004A0DC /* GameBoyAPU.swift */,
-				E23D5466307ADA770004A0DC /* AudioOutput.swift */,
-				E23D5480307ADA770004A0DC /* Emulator.swift */,
 				E23EB49E307AE40400A9E387 /* GameBoyError.swift */,
 				E23EB4A0307AE6FE00A9E387 /* CompatibilityPalettes.swift */,
+				E22BEDD62C34CAAB0061C4D2 /* JoypadState.swift */,
 			);
 			path = Hardware;
-			sourceTree = "<group>";
-		};
-		E22BEDD82C354DAE0061C4D2 /* Joypad */ = {
-			isa = PBXGroup;
-			children = (
-				E22BEDD62C34CAAB0061C4D2 /* GameBoyJoypad.swift */,
-				E22BEDD92C354DBA0061C4D2 /* KeyboardJoypad.swift */,
-			);
-			path = Joypad;
 			sourceTree = "<group>";
 		};
 		E22BEDDB2C3C16BB0061C4D2 /* CPU */ = {
@@ -137,15 +123,31 @@
 			path = CPU;
 			sourceTree = "<group>";
 		};
+		E23EB4AA307AFA1900A9E387 /* Emulation */ = {
+			isa = PBXGroup;
+			children = (
+				E23D5480307ADA770004A0DC /* Emulator.swift */,
+				E23D5466307ADA770004A0DC /* AudioOutput.swift */,
+			);
+			path = Emulation;
+			sourceTree = "<group>";
+		};
+		E23EB4AB307AFA1900A9E387 /* Library */ = {
+			isa = PBXGroup;
+			children = (
+				E23EB4A2307AE8D200A9E387 /* GameLibrary.swift */,
+				E23EB4A6307AECD800A9E387 /* GameCatalogue.swift */,
+			);
+			path = Library;
+			sourceTree = "<group>";
+		};
 		E2443AA12C3CAB9300113A62 /* Views */ = {
 			isa = PBXGroup;
 			children = (
-				E2674EA92C281FA500EE0206 /* GameBoyEmuApp.swift */,
 				E2674EAB2C281FA500EE0206 /* GameBoyView.swift */,
 				E23D5482307ADA770004A0DC /* GameBoyViewModel.swift */,
-				E23EB4A2307AE8D200A9E387 /* GameLibrary.swift */,
 				E23EB4A4307AE8D200A9E387 /* LibraryView.swift */,
-				E23EB4A6307AECD800A9E387 /* GameCatalogue.swift */,
+				E22BEDD92C354DBA0061C4D2 /* JoypadState+Keyboard.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -187,6 +189,9 @@
 				E2674EAF2C281FA600EE0206 /* Assets.xcassets */,
 				E2674EB12C281FA600EE0206 /* GameBoyEmu.entitlements */,
 				E2674EB22C281FA600EE0206 /* Preview Content */,
+				E23EB4AA307AFA1900A9E387 /* Emulation */,
+				E23EB4AB307AFA1900A9E387 /* Library */,
+				E2674EA92C281FA500EE0206 /* GameBoyEmuApp.swift */,
 			);
 			path = GameBoyEmu;
 			sourceTree = "<group>";
@@ -314,7 +319,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				E22BEDD72C34CAAB0061C4D2 /* GameBoyJoypad.swift in Sources */,
+				E22BEDD72C34CAAB0061C4D2 /* JoypadState.swift in Sources */,
 				E23EB4A3307AE8D200A9E387 /* GameLibrary.swift in Sources */,
 				E2443A9C2C3CA5DB00113A62 /* GameBoy.swift in Sources */,
 				E22BEDDD2C3C16C40061C4D2 /* CPUInstruction.swift in Sources */,
@@ -323,8 +328,7 @@
 				E23D5467307ADA770004A0DC /* AudioOutput.swift in Sources */,
 				E23D5481307ADA770004A0DC /* Emulator.swift in Sources */,
 				E23EB4A5307AE8D200A9E387 /* LibraryView.swift in Sources */,
-				E2443AB02C3DE97A00113A62 /* InterruptFlags.swift in Sources */,
-				E22BEDDA2C354DBA0061C4D2 /* KeyboardJoypad.swift in Sources */,
+				E22BEDDA2C354DBA0061C4D2 /* JoypadState+Keyboard.swift in Sources */,
 				E2443AA72C3D475B00113A62 /* GameBoyClock.swift in Sources */,
 				E2443AA32C3D3B9100113A62 /* CPUInstruction+CustomDebugStringConvertible.swift in Sources */,
 				E23EB49F307AE40400A9E387 /* GameBoyError.swift in Sources */,
