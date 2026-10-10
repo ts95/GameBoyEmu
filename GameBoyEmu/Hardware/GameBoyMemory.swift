@@ -141,6 +141,9 @@ class GameBoyMemory: AddressBusProtocol {
     /// The buttons, readable through 0xFF00.
     var joypad = JoypadState()
 
+    /// The serial port, mapped at 0xFF01-0xFF02, which a link cable plugs into.
+    let serial = GameBoySerialPort()
+
     /// Every byte the game has sent over the link cable. Test ROMs print their results this way.
     var serialOutput: [UInt8] = []
 
@@ -238,6 +241,10 @@ class GameBoyMemory: AddressBusProtocol {
                 return oam[address - OAM_START]
             case JOYPAD_REGISTER:
                 return readJoypad()
+            case SERIAL_DATA_REGISTER:
+                return serial.data
+            case SERIAL_CONTROL_REGISTER:
+                return serial.control | 0x7C // The unused bits read as 1
             case TIMER_REGISTERS_START...TIMER_REGISTERS_END:
                 return clock[address]
             case INTERRUPT_FLAG_REGISTER:
@@ -297,13 +304,14 @@ class GameBoyMemory: AddressBusProtocol {
             case JOYPAD_REGISTER:
                 // Only the two "which half of the buttons do you want" bits are writable
                 ioPorts[0] = newValue & 0x30
+            case SERIAL_DATA_REGISTER:
+                serial.data = newValue
             case SERIAL_CONTROL_REGISTER:
-                ioPorts[address - IO_PORTS_START] = newValue
-                if newValue == 0x81 {
-                    // ponytail: no link cable partner, the byte is just recorded. Raise the
-                    // serial interrupt (IF bit 3) here if a game waits for the transfer to end.
-                    serialOutput.append(self[SERIAL_DATA_REGISTER])
+                if newValue & 0x81 == 0x81 {
+                    // A transfer this console clocks itself: note the byte for the test ROMs
+                    serialOutput.append(serial.data)
                 }
+                serial.control = newValue
             case TIMER_REGISTERS_START...TIMER_REGISTERS_END:
                 clock[address] = newValue
             case SOUND_REGISTERS_START...SOUND_REGISTERS_END:
@@ -414,6 +422,9 @@ class GameBoyMemory: AddressBusProtocol {
     func tickClock(cycles: Int) {
         if clock.tick(cycles: cycles) {
             self[INTERRUPT_FLAG_REGISTER] |= 0x04
+        }
+        if serial.tick(cycles: cycles) {
+            self[INTERRUPT_FLAG_REGISTER] |= 0x08
         }
     }
 

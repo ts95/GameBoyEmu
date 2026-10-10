@@ -22,6 +22,8 @@
 		E23EB4A3307AE8D200A9E387 /* GameLibrary.swift in Sources */ = {isa = PBXBuildFile; fileRef = E23EB4A2307AE8D200A9E387 /* GameLibrary.swift */; };
 		E23EB4A5307AE8D200A9E387 /* LibraryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E23EB4A4307AE8D200A9E387 /* LibraryView.swift */; };
 		E23EB4A7307AECD800A9E387 /* GameCatalogue.swift in Sources */ = {isa = PBXBuildFile; fileRef = E23EB4A6307AECD800A9E387 /* GameCatalogue.swift */; };
+		E23EB4C1307AFBF100A9E387 /* GameBoySerialPort.swift in Sources */ = {isa = PBXBuildFile; fileRef = E23EB4C0307AFBF100A9E387 /* GameBoySerialPort.swift */; };
+		E23EB4C3307AFBF100A9E387 /* LinkCable.swift in Sources */ = {isa = PBXBuildFile; fileRef = E23EB4C2307AFBF100A9E387 /* LinkCable.swift */; };
 		E2443A9C2C3CA5DB00113A62 /* GameBoy.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2443A9B2C3CA5DB00113A62 /* GameBoy.swift */; };
 		E2443AA02C3CAB8B00113A62 /* pokemon_red.gb in Resources */ = {isa = PBXBuildFile; fileRef = E2443A9F2C3CAB8B00113A62 /* pokemon_red.gb */; };
 		E2443AA32C3D3B9100113A62 /* CPUInstruction+CustomDebugStringConvertible.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2443AA22C3D3B9100113A62 /* CPUInstruction+CustomDebugStringConvertible.swift */; };
@@ -61,6 +63,8 @@
 		E23EB4A2307AE8D200A9E387 /* GameLibrary.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GameLibrary.swift; sourceTree = "<group>"; };
 		E23EB4A4307AE8D200A9E387 /* LibraryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryView.swift; sourceTree = "<group>"; };
 		E23EB4A6307AECD800A9E387 /* GameCatalogue.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GameCatalogue.swift; sourceTree = "<group>"; };
+		E23EB4C0307AFBF100A9E387 /* GameBoySerialPort.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GameBoySerialPort.swift; sourceTree = "<group>"; };
+		E23EB4C2307AFBF100A9E387 /* LinkCable.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LinkCable.swift; sourceTree = "<group>"; };
 		E2443A9B2C3CA5DB00113A62 /* GameBoy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GameBoy.swift; sourceTree = "<group>"; };
 		E2443A9F2C3CAB8B00113A62 /* pokemon_red.gb */ = {isa = PBXFileReference; lastKnownFileType = file; path = pokemon_red.gb; sourceTree = "<group>"; };
 		E2443AA22C3D3B9100113A62 /* CPUInstruction+CustomDebugStringConvertible.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CPUInstruction+CustomDebugStringConvertible.swift"; sourceTree = "<group>"; };
@@ -109,6 +113,8 @@
 				E23EB49E307AE40400A9E387 /* GameBoyError.swift */,
 				E23EB4A0307AE6FE00A9E387 /* CompatibilityPalettes.swift */,
 				E22BEDD62C34CAAB0061C4D2 /* JoypadState.swift */,
+				E23EB4C0307AFBF100A9E387 /* GameBoySerialPort.swift */,
+				E23EB4C2307AFBF100A9E387 /* LinkCable.swift */,
 			);
 			path = Hardware;
 			sourceTree = "<group>";
@@ -319,6 +325,8 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				E23EB4C1307AFBF100A9E387 /* GameBoySerialPort.swift in Sources */,
+				E23EB4C3307AFBF100A9E387 /* LinkCable.swift in Sources */,
 				E22BEDD72C34CAAB0061C4D2 /* JoypadState.swift in Sources */,
 				E23EB4A3307AE8D200A9E387 /* GameLibrary.swift in Sources */,
 				E2443A9C2C3CA5DB00113A62 /* GameBoy.swift in Sources */,
