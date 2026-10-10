@@ -221,6 +221,12 @@ private func makeGameBoy(program: [UInt8] = [], isColor: Bool = false) throws ->
     #expect(gameBoy.memory[0xFF0F] & 0x01 != 0)
 }
 
+/// The pixel an original Game Boy game gets for a background shade (0-3), which depends on
+/// the color palette the console picked for the cartridge.
+private func backgroundShade(_ shade: Int, of gameBoy: GameBoy) -> UInt32 {
+    displayPixel(from: gameBoy.memory.colorPaletteEntry(isObject: false, index: shade))
+}
+
 @Test func ppuDrawsBackgroundTilesThroughThePalette() throws {
     let gameBoy = try makeGameBoy()
     gameBoy.memory[0xFF40] = 0x91 // LCD on, tile data at 0x8000, background on
@@ -231,9 +237,9 @@ private func makeGameBoy(program: [UInt8] = [], isColor: Bool = false) throws ->
 
     try gameBoy.runFrame()
 
-    #expect(gameBoy.ppu.displayBuffer[0] == monochromeColors[2])
-    #expect(gameBoy.ppu.displayBuffer[1] == monochromeColors[1])
-    #expect(gameBoy.ppu.displayBuffer[2] == monochromeColors[3]) // Color number 0
+    #expect(gameBoy.ppu.displayBuffer[0] == backgroundShade(2, of: gameBoy))
+    #expect(gameBoy.ppu.displayBuffer[1] == backgroundShade(1, of: gameBoy))
+    #expect(gameBoy.ppu.displayBuffer[2] == backgroundShade(3, of: gameBoy)) // Color number 0
 }
 
 @Test func ppuDrawsSprites() throws {
@@ -250,10 +256,10 @@ private func makeGameBoy(program: [UInt8] = [], isColor: Bool = false) throws ->
 
     try gameBoy.runFrame()
 
-    #expect(gameBoy.ppu.displayBuffer[2 * 160 + 4] == monochromeColors[0])
-    #expect(gameBoy.ppu.displayBuffer[9 * 160 + 4] == monochromeColors[3])
-    #expect(gameBoy.ppu.displayBuffer[9 * 160 + 11] == monochromeColors[3])
-    #expect(gameBoy.ppu.displayBuffer[9 * 160 + 12] == monochromeColors[0])
+    #expect(gameBoy.ppu.displayBuffer[2 * 160 + 4] == backgroundShade(0, of: gameBoy))
+    #expect(gameBoy.ppu.displayBuffer[9 * 160 + 4] == displayPixel(from: gameBoy.memory.colorPaletteEntry(isObject: true, index: 3)))
+    #expect(gameBoy.ppu.displayBuffer[9 * 160 + 11] == displayPixel(from: gameBoy.memory.colorPaletteEntry(isObject: true, index: 3)))
+    #expect(gameBoy.ppu.displayBuffer[9 * 160 + 12] == backgroundShade(0, of: gameBoy))
 }
 
 // MARK: - APU
@@ -477,6 +483,37 @@ private func run(_ apu: GameBoyAPU, seconds: Double) {
 
     memory[0x3000] = 0x00 // Bank 0 is a valid choice on MBC5
     #expect(memory[0x4010] == rom[0x10])
+}
+
+@Test func originalGamesGetThePaletteTheGameBoyColorPicksForThem() throws {
+    var rom = [UInt8](repeating: 0, count: 0x8000)
+
+    // Not published by Nintendo: the default combination, with a green and blue background
+    try #require(CompatibilityPalettes.palettes(forROM: rom).background == [0x7FFF, 0x1BEF, 0x6180, 0x0000])
+
+    // Pokemon Red: a red background, green for the first sprite palette
+    rom.replaceSubrange(0x134..<0x13F, with: Array("POKEMON RED".utf8))
+    rom[0x14B] = 0x33 // "See the new licensee code"...
+    rom[0x144] = UInt8(ascii: "0") // ...which is "01", Nintendo
+    rom[0x145] = UInt8(ascii: "1")
+    let red = CompatibilityPalettes.palettes(forROM: rom)
+    #expect(red.background == [0x7FFF, 0x421F, 0x1CF2, 0x0000])
+    #expect(red.object0 == [0x7FFF, 0x1BEF, 0x0200, 0x0000])
+    #expect(red.object1 == [0x7FFF, 0x421F, 0x1CF2, 0x0000])
+
+    // Pokemon Blue shares its title checksum with another game; the fourth letter decides
+    rom.replaceSubrange(0x134..<0x144, with: Array("POKEMON BLUE".utf8) + [0, 0, 0, 0])
+    #expect(CompatibilityPalettes.palettes(forROM: rom).background == [0x7FFF, 0x7E8C, 0x7C00, 0x0000])
+
+    // And the PPU draws with them: shade 3 of the background is color 3 of that palette
+    let gameBoy = GameBoy()
+    try gameBoy.loadCartridge(data: Data(rom))
+    gameBoy.memory[0xFF47] = 0b11_10_01_00
+    gameBoy.memory[0x8000] = 0b0100_0000 // Tile 0, first row: the second pixel has color number 2
+    gameBoy.memory[0x8001] = 0b0100_0000 // ...make that color number 3, and leave the first at 0
+    try gameBoy.runFrame()
+    #expect(gameBoy.ppu.displayBuffer[0] == displayPixel(from: 0x7FFF))
+    #expect(gameBoy.ppu.displayBuffer[1] == displayPixel(from: 0x0000))
 }
 
 // MARK: - Emulator

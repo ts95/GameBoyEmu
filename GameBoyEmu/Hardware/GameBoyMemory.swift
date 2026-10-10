@@ -341,6 +341,23 @@ class GameBoyMemory: AddressBusProtocol {
         wramBank = 1
         bank1High = 0
 
+        // A Color game sets its own palettes. An original game gets the ones the Game Boy
+        // Color's boot program would pick for it: background palette 0 and sprite palettes
+        // 0 and 1, which the PPU then uses in place of four shades of grey.
+        backgroundPalettes = [UInt8](repeating: 0xFF, count: 64)
+        objectPalettes = [UInt8](repeating: 0xFF, count: 64)
+        if !isColorMode {
+            let palettes = CompatibilityPalettes.palettes(forROM: cartridgeData)
+            for (index, color) in palettes.background.enumerated() {
+                backgroundPalettes[index * 2] = UInt8(color & 0xFF)
+                backgroundPalettes[index * 2 + 1] = UInt8(color >> 8)
+            }
+            for (index, color) in (palettes.object0 + palettes.object1).enumerated() {
+                objectPalettes[index * 2] = UInt8(color & 0xFF)
+                objectPalettes[index * 2 + 1] = UInt8(color >> 8)
+            }
+        }
+
         // The header gives the size of the cartridge RAM; only the largest kind needs
         // more than the default 4 banks
         let ramBankCount = cartridgeData[0x149] == 0x04 ? 16 : cartridgeData[0x149] == 0x05 ? 8 : 4

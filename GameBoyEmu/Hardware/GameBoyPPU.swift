@@ -10,8 +10,21 @@ import Foundation
 let displayBufferWidth = 160
 let displayBufferHeight = 144
 
-/// The four shades of the original Game Boy's screen, lightest first, as display buffer pixels.
-let monochromeColors: [UInt32] = ([0xE6, 0xB3, 0x4D, 0x00] as [UInt32]).map { 0xFF00_0000 | $0 << 16 | $0 << 8 | $0 }
+/// A white display buffer pixel, which is what the screen shows before anything is drawn.
+let blankPixel: UInt32 = 0xFFFF_FFFF
+
+/// Converts a Game Boy Color color (15 bits: 5 each of red, green and blue, red lowest)
+/// into a display buffer pixel.
+///
+/// ponytail: the 5-bit channels are stretched straight to 8 bits. The real LCD is more
+/// washed out; add a color correction curve here if the colors look too saturated.
+func displayPixel(from color: UInt16) -> UInt32 {
+    func channel(_ shift: UInt16) -> UInt32 {
+        let value = UInt32((color >> shift) & 0x1F)
+        return value << 3 | value >> 2
+    }
+    return 0xFF00_0000 | channel(10) << 16 | channel(5) << 8 | channel(0)
+}
 
 /// The PPU mode states.
 ///
@@ -76,8 +89,8 @@ class GameBoyPPU<AddressBus: AddressBusProtocol> {
     ///
     /// This property is an array of 160x144 elements, each representing a pixel on the Game Boy display.
     /// A pixel is a ready-to-show color: its bytes in memory are red, green, blue and an unused
-    /// fourth byte. An original Game Boy game only ever produces the four `monochromeColors`.
-    var displayBuffer: [UInt32] = Array(repeating: monochromeColors[0], count: displayBufferWidth * displayBufferHeight)
+    /// fourth byte.
+    var displayBuffer: [UInt32] = Array(repeating: blankPixel, count: displayBufferWidth * displayBufferHeight)
 
     /// The background/window color numbers (before the palette) of the scanline being drawn.
     /// Sprites need them, because a sprite can ask to be drawn behind non-zero background pixels.
@@ -190,33 +203,30 @@ class GameBoyPPU<AddressBus: AddressBusProtocol> {
         }
     }
 
-    /// Turns a color number (0-3) into a display buffer pixel on an original Game Boy.
+    /// Turns a color number (0-3) into a display buffer pixel for an original Game Boy game.
     ///
-    /// The palette register maps each color number to one of four shades, two bits each:
-    /// bits 1-0 for color number 0, up to bits 7-6 for color number 3.
+    /// The game's palette register maps each color number to one of four shades, two bits
+    /// each: bits 1-0 for color number 0, up to bits 7-6 for color number 3. On an original
+    /// Game Boy that shade was the final result. A Game Boy Color goes one step further and
+    /// shows each shade as a color from a palette it chose for the game (see
+    /// `CompatibilityPalettes`), which is what happens here.
     ///
     /// - Parameters:
     ///   - colorNum: The 2-bit color number (0 to 3) for the pixel.
-    ///   - paletteAddr: The address of the palette register in addressBus.
-    private func monochromeColor(colorNum: UInt8, paletteAddr: Int) -> UInt32 {
-        monochromeColors[Int((addressBus[paletteAddr] >> (colorNum * 2)) & 0x03)]
+    ///   - paletteAddr: The address of the game's palette register in addressBus.
+    ///   - palette: Which of the console's color palettes the shades are shown with.
+    ///   - isObject: Whether that is a sprite palette or a background palette.
+    private func compatibilityColor(colorNum: UInt8, paletteAddr: Int, palette: Int, isObject: Bool) -> UInt32 {
+        let shade = (addressBus[paletteAddr] >> (colorNum * 2)) & 0x03
+        return color(colorNum: shade, palette: palette, isObject: isObject)
     }
 
-    /// Turns a color number (0-3) into a display buffer pixel on a Game Boy Color.
+    /// Looks a color number (0-3) up in one of the console's color palettes.
     ///
-    /// There are 8 background and 8 sprite palettes of 4 colors each, and every tile or sprite
-    /// says which one it uses. A color is 15 bits: 5 each of red, green and blue.
-    ///
-    /// ponytail: the 5-bit channels are stretched straight to 8 bits. The real LCD is more
-    /// washed out; add a color correction curve here if the colors look too saturated.
+    /// There are 8 background and 8 sprite palettes of 4 colors each, and on a Game Boy Color
+    /// every tile or sprite says which one it uses.
     private func color(colorNum: UInt8, palette: Int, isObject: Bool) -> UInt32 {
-        let entry = addressBus.colorPaletteEntry(isObject: isObject, index: palette * 4 + Int(colorNum))
-
-        func channel(_ shift: UInt16) -> UInt32 {
-            let value = UInt32((entry >> shift) & 0x1F)
-            return value << 3 | value >> 2
-        }
-        return 0xFF00_0000 | channel(10) << 16 | channel(5) << 8 | channel(0)
+        displayPixel(from: addressBus.colorPaletteEntry(isObject: isObject, index: palette * 4 + Int(colorNum)))
     }
 
     private func renderScanline() {
@@ -256,7 +266,7 @@ class GameBoyPPU<AddressBus: AddressBusProtocol> {
             lineHasPriority[x] = pixel.attributes & 0x80 != 0 // Bit 7 of the tile attributes
             displayBuffer[ly * displayBufferWidth + x] = isColorMode
                 ? color(colorNum: pixel.colorNumber, palette: Int(pixel.attributes & 0x07), isObject: false)
-                : monochromeColor(colorNum: pixel.colorNumber, paletteAddr: 0xFF47)
+                : compatibilityColor(colorNum: pixel.colorNumber, paletteAddr: 0xFF47, palette: 0, isObject: false)
         }
 
         if isWindowVisible {
@@ -360,8 +370,10 @@ class GameBoyPPU<AddressBus: AddressBusProtocol> {
                 displayBuffer[ly * displayBufferWidth + xPixel] = isColorMode
                     // Bits 0-2 of attributes: Color palette number
                     ? color(colorNum: colorNum, palette: Int(attributes & 0x07), isObject: true)
-                    // Bit 4 of attributes: Monochrome palette number
-                    : monochromeColor(colorNum: colorNum, paletteAddr: attributes & 0x10 != 0 ? 0xFF49 : 0xFF48)
+                    // Bit 4 of attributes: which of the two original sprite palettes
+                    : attributes & 0x10 != 0
+                        ? compatibilityColor(colorNum: colorNum, paletteAddr: 0xFF49, palette: 1, isObject: true)
+                        : compatibilityColor(colorNum: colorNum, paletteAddr: 0xFF48, palette: 0, isObject: true)
             }
         }
     }
