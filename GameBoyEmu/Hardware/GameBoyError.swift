@@ -11,10 +11,10 @@ import Foundation
 /// `recoverySuggestion` says what, if anything, can be done about it. Underlying system errors
 /// are carried as text so the error can be passed between the emulator and the UI.
 enum GameBoyError: LocalizedError, Equatable, Sendable {
-    /// The app bundle has no ROM with this name.
-    case romNotFound(name: String)
-    /// The ROM file exists but couldn't be read.
+    /// The ROM file couldn't be read.
     case romNotReadable(name: String, reason: String)
+    /// The ROM file couldn't be copied into the library.
+    case romNotAdded(name: String, reason: String)
     /// The data is too small to be a Game Boy ROM.
     case invalidROM
     /// The cartridge has a bank controller chip this emulator doesn't implement.
@@ -32,10 +32,10 @@ enum GameBoyError: LocalizedError, Equatable, Sendable {
 
     var errorDescription: String? {
         switch self {
-        case .romNotFound(let name):
-            "The game “\(name)” couldn't be found."
         case .romNotReadable(let name, _):
             "The game “\(name)” couldn't be opened."
+        case .romNotAdded(let name, _):
+            "The game “\(name)” couldn't be added to your library."
         case .invalidROM:
             "This file isn't a Game Boy game."
         case .unsupportedCartridge:
@@ -55,9 +55,7 @@ enum GameBoyError: LocalizedError, Equatable, Sendable {
 
     var recoverySuggestion: String? {
         switch self {
-        case .romNotFound:
-            "Make sure the ROM file is included in the app."
-        case .romNotReadable(_, let reason):
+        case .romNotReadable(_, let reason), .romNotAdded(_, let reason):
             reason
         case .invalidROM:
             "The file is too small to contain a game. It may be damaged or incomplete."

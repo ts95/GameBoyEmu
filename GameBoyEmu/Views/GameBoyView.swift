@@ -12,9 +12,9 @@ struct GameBoyView: View {
     // @State keeps one model alive for the lifetime of the view
     @State private var model = GameBoyViewModel()
 
-    /// The bundled ROM to run, without its extension. `nil` shows the console switched off.
-    // var rom: String? = "cpu_instrs"
-    var rom: String? = "pokemon_red"
+    /// The game to run. `nil` shows the console switched off.
+    var game: Game?
+
     @FocusState private var isFocused: Bool
     @GestureState private var dPadState = DPadState.idle
 
@@ -218,8 +218,8 @@ struct GameBoyView: View {
             isFocused = true
         }
         .task {
-            if let rom {
-                await model.run(romNamed: rom)
+            if let game {
+                await model.run(game)
             }
         }
         .alert(isPresented: isShowingError, error: model.error) { _ in
@@ -250,7 +250,7 @@ struct JoypadButtonStyle: ButtonStyle {
     }
 }
 
-// No ROM: the preview only draws the console, it doesn't run a game
+// No game: the preview only draws the console, it doesn't run anything
 #Preview {
-    GameBoyView(rom: nil)
+    GameBoyView(game: nil)
 }

@@ -129,6 +129,11 @@ actor Emulator {
             }
             try? await Task.sleep(until: nextFrame, clock: .continuous)
         }
+
+        // Leaving the game: don't lose what was saved in the last second
+        if let saveURL, gameBoy.memory.hasBattery, gameBoy.memory.hasUnsavedExternalRam {
+            try? writeSave(to: saveURL)
+        }
     }
 
     /// Reads the save file, if there is one.

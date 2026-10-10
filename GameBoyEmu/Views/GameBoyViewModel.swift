@@ -43,26 +43,19 @@ final class GameBoyViewModel {
     /// The problem to tell the player about, if any. Set back to `nil` once it has been shown.
     var error: GameBoyError?
 
-    /// Runs a ROM from the app bundle, updating `frame` as frames arrive, until the calling
-    /// task is cancelled. Anything that goes wrong ends up in `error` rather than being thrown,
-    /// because this is where errors turn into something the player sees.
-    ///
-    /// - Parameter name: The ROM's file name, without the ".gb" extension.
-    func run(romNamed name: String) async {
+    /// Runs a game, updating `frame` as frames arrive, until the calling task is cancelled.
+    /// Anything that goes wrong ends up in `error` rather than being thrown, because this is
+    /// where errors turn into something the player sees.
+    func run(_ game: Game) async {
         do {
-            guard let url = Bundle.main.url(forResource: name, withExtension: "gb") else {
-                throw GameBoyError.romNotFound(name: name)
-            }
             let rom: Data
             do {
-                rom = try Data(contentsOf: url)
+                rom = try Data(contentsOf: game.romURL)
             } catch {
-                throw GameBoyError.romNotReadable(name: name, reason: error.localizedDescription)
+                throw GameBoyError.romNotReadable(name: game.title, reason: error.localizedDescription)
             }
 
-            // Saves live in the app's own container, as <rom>.sav
-            let saveURL = URL.applicationSupportDirectory.appending(path: "\(name).sav")
-            let frames = emulator.run(rom: rom, saveURL: saveURL) { [weak self] warning in
+            let frames = emulator.run(rom: rom, saveURL: game.saveURL) { [weak self] warning in
                 Task { @MainActor in
                     self?.error = warning
                 }
