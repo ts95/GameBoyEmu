@@ -133,6 +133,29 @@ private func makeGameBoy(program: [UInt8] = []) -> GameBoy {
     #expect(memory[0x4010] == 1)
 }
 
+@Test func cartridgeRAMSurvivesBeingSavedAndLoadedAgain() {
+    var rom = [UInt8](repeating: 0, count: 4 * 0x4000)
+    rom[0x147] = 0x13 // MBC3 with RAM and battery
+
+    let memory = GameBoyMemory()
+    memory.loadCartridge(data: Data(rom))
+    #expect(memory.hasBattery)
+    #expect(!memory.hasUnsavedExternalRam)
+
+    memory[0xA000] = 0x11
+    memory[0x4000] = 2 // Switch to RAM bank 2
+    memory[0xBFFF] = 0x22
+    #expect(memory.hasUnsavedExternalRam)
+
+    let restored = GameBoyMemory()
+    restored.loadCartridge(data: Data(rom), save: Data(memory.externalRam))
+
+    #expect(!restored.hasUnsavedExternalRam)
+    #expect(restored[0xA000] == 0x11)
+    restored[0x4000] = 2
+    #expect(restored[0xBFFF] == 0x22)
+}
+
 @Test func dmaTransferCopiesSpriteDataIntoOAM() {
     let memory = GameBoyMemory()
     memory[0xC000] = 0xAA

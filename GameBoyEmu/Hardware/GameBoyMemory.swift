@@ -116,6 +116,16 @@ class GameBoyMemory: AddressBusProtocol {
         cartridgeData.count > 0x147 ? cartridgeData[0x147] : 0
     }
 
+    /// Whether the cartridge keeps its RAM powered with a battery, which is how games save.
+    /// Without one the RAM is just extra scratch space that is lost at power-off.
+    var hasBattery: Bool {
+        [0x03, 0x06, 0x09, 0x0D, 0x0F, 0x10, 0x13, 0x1B, 0x1E].contains(cartridgeType)
+    }
+
+    /// Set whenever the game writes to cartridge RAM, so the host knows there is something
+    /// new to write to the save file. The host clears it after saving.
+    var hasUnsavedExternalRam = false
+
     private var isMBC3: Bool {
         (0x0F...0x13).contains(cartridgeType)
     }
@@ -202,6 +212,7 @@ class GameBoyMemory: AddressBusProtocol {
                 vram[address - VRAM_START] = newValue
             case EXTERNAL_RAM_START...EXTERNAL_RAM_END:
                 externalRam[ramBankOffset + address - EXTERNAL_RAM_START] = newValue
+                hasUnsavedExternalRam = true
             case WRAM_START...WRAM_END:
                 wram[address - WRAM_START] = newValue
             case ECHO_RAM_START...ECHO_RAM_END:
@@ -243,8 +254,17 @@ class GameBoyMemory: AddressBusProtocol {
         }
     }
 
-    func loadCartridge(data: Data) {
+    /// Inserts a cartridge.
+    ///
+    /// - Parameters:
+    ///   - data: The cartridge ROM.
+    ///   - save: The contents of the cartridge RAM from an earlier session, if any.
+    func loadCartridge(data: Data, save: Data? = nil) {
         cartridgeData = [UInt8](data)
+        if let save {
+            externalRam.replaceSubrange(0..<min(save.count, externalRam.count), with: save.prefix(externalRam.count))
+        }
+        hasUnsavedExternalRam = false
         bank1 = 1
         bank2 = 0
         mode = .rom

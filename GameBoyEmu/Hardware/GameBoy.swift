@@ -60,13 +60,19 @@ class GameBoy: ObservableObject {
 
     // ponytail: runs on the main actor. A frame takes well under a millisecond of host time
     // in release builds; move it to a background task if debug builds stutter.
+    /// Runs the emulation until the surrounding task is cancelled.
+    ///
+    /// - Parameters:
+    ///   - data: The cartridge ROM.
+    ///   - saveURL: Where the cartridge's battery-backed RAM is kept between sessions.
     @MainActor
-    func start(withROM data: Data) async {
-        memory.loadCartridge(data: data)
+    func start(withROM data: Data, saveURL: URL? = nil) async {
+        memory.loadCartridge(data: data, save: saveURL.flatMap { try? Data(contentsOf: $0) })
 
         let frameDuration = Duration.seconds(Double(GameBoy.cyclesPerFrame) / GameBoyClock.frequency)
         var nextFrame = ContinuousClock.now
         let audio = AudioOutput()
+        var framesUntilSaveCheck = 60
 
         // Emulate a whole frame as fast as possible, then sleep until it is due. Sleeping
         // after every instruction can't work: a sleep takes far longer than the ~1µs asked for.
@@ -77,11 +83,32 @@ class GameBoy: ObservableObject {
             audio.play(samples: memory.apu.pendingSamples)
             memory.apu.pendingSamples.removeAll(keepingCapacity: true)
 
+            // A save file is just a copy of the cartridge RAM. Checking once per second
+            // writes it shortly after the game has saved, without writing on every byte.
+            framesUntilSaveCheck -= 1
+            if framesUntilSaveCheck == 0 {
+                framesUntilSaveCheck = 60
+                if let saveURL, memory.hasBattery, memory.hasUnsavedExternalRam {
+                    writeSave(to: saveURL)
+                }
+            }
+
             nextFrame += frameDuration
             if nextFrame < .now - .milliseconds(100) {
                 nextFrame = .now // After a long stall, carry on from here instead of fast-forwarding
             }
             try? await Task.sleep(until: nextFrame, clock: .continuous)
+        }
+    }
+
+    private func writeSave(to url: URL) {
+        do {
+            try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+            // Atomic, so a crash mid-write can't leave a half-written save behind
+            try Data(memory.externalRam).write(to: url, options: .atomic)
+            memory.hasUnsavedExternalRam = false
+        } catch {
+            print("Couldn't write the save file: \(error)")
         }
     }
 }

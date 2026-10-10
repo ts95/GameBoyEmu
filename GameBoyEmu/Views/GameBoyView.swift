@@ -164,7 +164,9 @@ struct GameBoyView: View {
         if let url = Bundle.main.url(forResource: rom, withExtension: "gb") {
             do {
                 let romData = try Data(contentsOf: url)
-                await gameBoy.start(withROM: romData)
+                // Saves live in the app's own container, as <rom>.sav
+                let saveURL = URL.applicationSupportDirectory.appending(path: "\(rom).sav")
+                await gameBoy.start(withROM: romData, saveURL: saveURL)
             } catch {
                 print(error)
             }
