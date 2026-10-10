@@ -16,7 +16,8 @@ struct Game: Identifiable, Hashable, Sendable {
 
     /// The ROM's file name without its extension. Also names the save file.
     let id: String
-    /// The title from the cartridge header, or the file name if the header has none.
+    /// The name the player gave the game, or else its name from the catalogue of well-known
+    /// games, or else the title from the cartridge header, or else the file name.
     let title: String
     let romURL: URL
     /// Whether the ROM ships inside the app, as opposed to having been opened by the player.
@@ -47,10 +48,17 @@ final class GameLibrary {
     private static let includedROMNames = ["pokemon_red"]
     private static let romsDirectory = URL.applicationSupportDirectory.appending(path: "ROMs")
     private static let lastPlayedKey = "lastPlayed"
+    private static let customTitlesKey = "customTitles"
 
     private var lastPlayed: [String: Date] {
         get { UserDefaults.standard.dictionary(forKey: Self.lastPlayedKey) as? [String: Date] ?? [:] }
         set { UserDefaults.standard.set(newValue, forKey: Self.lastPlayedKey) }
+    }
+
+    /// The names the player has given to games, by game id.
+    private var customTitles: [String: String] {
+        get { UserDefaults.standard.dictionary(forKey: Self.customTitlesKey) as? [String: String] ?? [:] }
+        set { UserDefaults.standard.set(newValue, forKey: Self.customTitlesKey) }
     }
 
     /// Reads the library from disk again, picking up new save data and play dates.
@@ -108,6 +116,14 @@ final class GameLibrary {
         lastPlayed[game.id] = .now
     }
 
+    /// Gives a game a name of the player's choosing, which is remembered between launches.
+    /// An empty name goes back to the game's own title.
+    func rename(_ game: Game, to name: String) {
+        let name = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        customTitles[game.id] = name.isEmpty ? nil : name
+        reload()
+    }
+
     /// Removes a game the player opened from the library. Its save data is kept.
     func remove(_ game: Game) throws {
         guard !game.isIncluded else {
@@ -119,6 +135,7 @@ final class GameLibrary {
             throw GameBoyError.unexpected(reason: error.localizedDescription)
         }
         lastPlayed[game.id] = nil
+        customTitles[game.id] = nil
         reload()
     }
 
@@ -134,7 +151,8 @@ final class GameLibrary {
 
     private func game(at url: URL, isIncluded: Bool) -> Game {
         let id = url.deletingPathExtension().lastPathComponent
-        var game = Game(id: id, title: Self.title(ofROMAt: url) ?? id, romURL: url, isIncluded: isIncluded)
+        let title = customTitles[id] ?? Self.title(ofROMAt: url) ?? id
+        var game = Game(id: id, title: title, romURL: url, isIncluded: isIncluded)
         game.lastPlayed = lastPlayed[id]
 
         if let attributes = try? FileManager.default.attributesOfItem(atPath: game.saveURL.path),
@@ -145,7 +163,8 @@ final class GameLibrary {
         return game
     }
 
-    /// Reads the game's title from the cartridge header (0x0134-0x0143).
+    /// Works out a game's name from the title in its cartridge header (0x0134-0x0143):
+    /// the proper name if the catalogue knows the game, and otherwise the header title itself.
     private static func title(ofROMAt url: URL) -> String? {
         guard let rom = try? Data(contentsOf: url, options: .mappedIfSafe), rom.count >= 0x150 else {
             return nil
@@ -154,6 +173,12 @@ final class GameLibrary {
         // things, so it ends at the first byte that isn't a printable character
         let bytes = rom[(rom.startIndex + 0x134)..<(rom.startIndex + 0x144)].prefix { (0x20...0x7E).contains($0) }
         let title = String(decoding: bytes, as: UTF8.self).trimmingCharacters(in: .whitespaces)
-        return title.isEmpty ? nil : title.capitalized
+        guard !title.isEmpty else {
+            return nil
+        }
+
+        // Bit 7 of the last header title byte marks a game made for the Game Boy Color
+        let isColor = rom[rom.startIndex + 0x143] & 0x80 != 0
+        return GameCatalogue.name(headerTitle: title, isColor: isColor) ?? title.capitalized
     }
 }

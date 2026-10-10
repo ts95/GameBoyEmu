@@ -13,6 +13,8 @@ struct LibraryView: View {
     @State private var path: [Game] = []
     @State private var isPickingROM = false
     @State private var gameToDeleteSaveOf: Game?
+    @State private var gameToRename: Game?
+    @State private var newName = ""
     @State private var error: GameBoyError?
 
     var body: some View {
@@ -70,6 +72,15 @@ struct LibraryView: View {
             } message: { _ in
                 Text("Your progress in this game will be lost. This can't be undone.")
             }
+            .alert("Rename Game", isPresented: isRenaming, presenting: gameToRename) { game in
+                TextField("Name", text: $newName)
+                Button("Save") {
+                    library.rename(game, to: newName)
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: { _ in
+                Text("Leave the name empty to go back to the game's own title.")
+            }
             .alert(isPresented: isShowingError, error: error) { _ in
                 Button("OK") {}
             } message: { error in
@@ -124,6 +135,11 @@ struct LibraryView: View {
 
     @ViewBuilder
     private func actions(for game: Game) -> some View {
+        Button("Rename", systemImage: "pencil") {
+            newName = game.title
+            gameToRename = game
+        }
+        .tint(.blue)
         if !game.isIncluded {
             Button("Remove", systemImage: "minus.circle") {
                 perform { try library.remove(game) }
@@ -143,6 +159,16 @@ struct LibraryView: View {
         } set: { isConfirming in
             if !isConfirming {
                 gameToDeleteSaveOf = nil
+            }
+        }
+    }
+
+    private var isRenaming: Binding<Bool> {
+        Binding {
+            gameToRename != nil
+        } set: { isRenaming in
+            if !isRenaming {
+                gameToRename = nil
             }
         }
     }
