@@ -31,9 +31,9 @@ final class AudioOutput {
 
         engine.attach(player)
         engine.connect(player, to: engine.mainMixerNode, format: format)
-        // The mixed signal is loud at full scale, so it is played at half volume. The device's
+        // The mixed signal is loud at full scale. The device's
         // own volume controls still apply on top.
-        player.volume = 0.5
+        player.volume = 0.1
 
         try engine.start()
         player.play()
