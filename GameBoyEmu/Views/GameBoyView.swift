@@ -21,20 +21,39 @@ struct GameBoyView: View {
     /// Compact when there is little height to work with, as on a phone held sideways.
     @Environment(\.verticalSizeClass) private var verticalSizeClass
 
+    var isLandscape: Bool {
+        verticalSizeClass == .compact
+    }
+
     let dPadSize: CGFloat = 150
+    /// How far Select and Start stay off the bottom edge in landscape.
+    let landscapeOptionButtonInset: CGFloat = 16
 
     let gameBoyBeige = Color(red: 182/255, green: 183/255, blue: 178/255)
+    let powerLightRed = Color(red: 214/255, green: 52/255, blue: 60/255)
 
     var aspectRatio: CGFloat {
         CGFloat(displayBufferWidth) / CGFloat(displayBufferHeight)
     }
 
+    /// The LCD inside its bezel, with the power light. Games draw right up to the edge of
+    /// the picture because on the console a bezel was always there.
     var screen: some View {
-        RoundedRectangle(cornerRadius: 4)
+        Rectangle()
             .fill(.white)
             .aspectRatio(aspectRatio, contentMode: .fit)
             .overlay {
                 canvas
+            }
+            // A slimmer bezel in landscape, where every point goes to the picture
+            .padding(.horizontal, isLandscape ? 16 : 22)
+            .padding(.vertical, isLandscape ? 10 : 14)
+            .background(.white, in: RoundedRectangle(cornerRadius: 12))
+            .overlay(alignment: .leading) {
+                Circle()
+                    .fill(powerLightRed)
+                    .frame(width: 7, height: 7)
+                    .padding(.leading, isLandscape ? 5 : 8)
             }
     }
 
@@ -103,21 +122,41 @@ struct GameBoyView: View {
     /// The console on its side: the screen in the middle, taking the full height, with the
     /// d-pad to its left and the buttons to its right. Stacking them, as in portrait, would
     /// leave no room for the screen.
+    ///
+    /// Select and Start go to opposite corners, under the d-pad and under A and B. Side by
+    /// side they would need a column wide enough to cost the screen a good part of its size.
     var landscapeLayout: some View {
-        HStack(spacing: 24) {
-            dPad
+        HStack(spacing: 16) {
+            ZStack(alignment: .bottom) {
+                raised(dPad)
+                selectButton
+                    .padding(.bottom, landscapeOptionButtonInset)
+            }
 
             screen
 
-            VStack(spacing: 16) {
-                muteButton
-                    .frame(maxWidth: .infinity, alignment: .trailing)
-                Spacer()
-                actionButtons
-                Spacer()
-                optionButtons
+            ZStack {
+                raised(actionButtons)
+                VStack {
+                    muteButton
+                        .frame(maxWidth: .infinity, alignment: .trailing)
+                    Spacer()
+                    startButton
+                        .padding(.bottom, landscapeOptionButtonInset)
+                }
             }
-            .frame(width: 190)
+            .frame(width: 170)
+        }
+    }
+
+    /// Places a control above the middle of its column: a third of the spare height above
+    /// it and two thirds below. Thumbs rest in the upper half of a phone held sideways.
+    func raised(_ control: some View) -> some View {
+        VStack(spacing: 0) {
+            Spacer(minLength: 0)
+            control
+            Spacer(minLength: 0)
+            Spacer(minLength: 0)
         }
     }
 
@@ -203,16 +242,25 @@ struct GameBoyView: View {
 
     var optionButtons: some View {
         HStack(spacing: 16) {
-            optionButton("Select") { model.joypad.selectButtonPressed = $0 }
-            optionButton("Start") { model.joypad.startButtonPressed = $0 }
+            selectButton
+            startButton
         }
-        .font(.title3.bold())
-        .foregroundStyle(.primary)
+    }
+
+    var selectButton: some View {
+        optionButton("Select") { model.joypad.selectButtonPressed = $0 }
+    }
+
+    var startButton: some View {
+        optionButton("Start") { model.joypad.startButtonPressed = $0 }
     }
 
     func optionButton(_ title: String, onPressChange: @escaping (Bool) -> Void) -> some View {
         Button(action: {}, label: {
             Text(title)
+                .font(.title3.bold())
+                .foregroundStyle(.primary)
+                .fixedSize() // Never wrap a label onto two lines
                 .padding(.horizontal, 12)
                 .padding(.vertical, 6)
                 .background(.gray.opacity(0.3), in: RoundedRectangle(cornerRadius: 8))
@@ -234,15 +282,20 @@ struct GameBoyView: View {
 
     var body: some View {
         Group {
-            if verticalSizeClass == .compact {
+            if isLandscape {
+                // The safe area already keeps the controls clear of the screen's rounded
+                // corners and the Dynamic Island, so no further side margin is added. The
+                // strip above the home indicator at the bottom is used as well.
                 landscapeLayout
+                    .padding(.vertical, 8)
+                    .ignoresSafeArea(.container, edges: .bottom)
             } else {
                 portraitLayout
+                    .padding()
             }
         }
         .fontDesign(.monospaced)
         .textCase(.uppercase)
-        .padding()
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(gameBoyBeige.opacity(0.2))
         // Keyboard: WASD = d-pad, J = A, K = B, Z = Select, X = Start
