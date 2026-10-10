@@ -9,7 +9,10 @@ import SwiftUI
 import SwiftData
 
 struct GameBoyView: View {
-    @ObservedObject var gameBoy = GameBoy()
+    // @StateObject keeps one GameBoy alive for the lifetime of the view. With @ObservedObject
+    // a new one is created every time SwiftUI re-creates the view struct.
+    @StateObject var gameBoy = GameBoy()
+    @FocusState private var isFocused: Bool
 
     let gameBoyBeige = Color(red: 182/255, green: 183/255, blue: 178/255)
 
@@ -26,21 +29,28 @@ struct GameBoyView: View {
             }
     }
 
-    var canvas: Canvas<EmptyView> {
-        Canvas { context, size in
-            let pixelWidth = size.width / CGFloat(displayBufferWidth)
-            let pixelHeight = size.height / CGFloat(displayBufferHeight)
+    /// The current frame as a 160x144 grayscale image, scaled up without smoothing.
+    @ViewBuilder
+    var canvas: some View {
+        // Color 0 is the lightest shade and 3 the darkest
+        let shades: [UInt8] = [0xE6, 0xB3, 0x4D, 0x00]
+        let pixels = Data(gameBoy.frame.map { shades[Int($0)] })
 
-            for y in 0..<displayBufferHeight {
-                for x in 0..<displayBufferWidth {
-                    let color = getPixelColor(x: x, y: y)
-                    let rect = CGRect(x: CGFloat(x) * pixelWidth,
-                                      y: CGFloat(y) * pixelHeight,
-                                      width: pixelWidth,
-                                      height: pixelHeight)
-                    context.fill(Path(rect), with: .color(color))
-                }
-            }
+        if let provider = CGDataProvider(data: pixels as CFData),
+           let image = CGImage(width: displayBufferWidth,
+                               height: displayBufferHeight,
+                               bitsPerComponent: 8,
+                               bitsPerPixel: 8,
+                               bytesPerRow: displayBufferWidth,
+                               space: CGColorSpaceCreateDeviceGray(),
+                               bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.none.rawValue),
+                               provider: provider,
+                               decode: nil,
+                               shouldInterpolate: false,
+                               intent: .defaultIntent) {
+            Image(decorative: image, scale: 1)
+                .interpolation(.none)
+                .resizable()
         }
     }
 
@@ -134,15 +144,23 @@ struct GameBoyView: View {
         }
         .padding()
         .background(gameBoyBeige.opacity(0.2))
+        // Keyboard: WASD = d-pad, J = A, K = B, Z = Select, X = Start
+        .focusable()
+        .focusEffectDisabled()
+        .focused($isFocused)
+        .onKeyPress(phases: [.down, .up], action: gameBoy.joypad.onKeyPress)
+        .onAppear {
+            isFocused = true
+        }
         .task {
             await startGameBoy()
         }
     }
 
     func startGameBoy() async {
-        // let rom = "pokemon_red"
+        let rom = "pokemon_red"
         // let rom = "cpu_instrs"
-        let rom = "cpu_instrs"
+        // let rom = "cpu_instrs"
         if let url = Bundle.main.url(forResource: rom, withExtension: "gb") {
             do {
                 let romData = try Data(contentsOf: url)
@@ -152,21 +170,6 @@ struct GameBoyView: View {
             }
         } else {
             print("Couldn't find ROM")
-        }
-    }
-
-    func getPixelColor(x: Int, y: Int) -> Color {
-        let pixelColor = gameBoy.ppu[x, y]
-
-        switch pixelColor {
-        case .light:
-            return .black.opacity(0.1)
-        case .lightGray:
-            return .black.opacity(0.3)
-        case .darkGray:
-            return .black.opacity(0.7)
-        case .dark:
-            return .black
         }
     }
 }

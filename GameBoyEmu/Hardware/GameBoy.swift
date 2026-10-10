@@ -10,40 +10,70 @@ import Foundation
 /// The class that ties all of the Game Boy's components together into a cohesive whole.
 /// Instantiate and start with a game ROM.
 class GameBoy: ObservableObject {
-    let clock: GameBoyClock
-    var memory: GameBoyMemory
-    @Published var cpu: GameBoyCPU<GameBoyMemory>
-    @Published var ppu: GameBoyPPU<GameBoyMemory>
+    /// T cycles per frame: 154 scanlines of 456 cycles each, which gives ~59.7 frames per second.
+    static let cyclesPerFrame = 154 * 456
+
+    let memory: GameBoyMemory
+    let cpu: GameBoyCPU<GameBoyMemory>
+    let ppu: GameBoyPPU<GameBoyMemory>
+    let joypad = KeyboardJoypad()
+
+    /// The last completed frame, one color (0-3) per pixel. Published once per frame, so the
+    /// UI redraws 60 times per second instead of once per pixel or per instruction.
+    @Published var frame: [UInt8] = Array(repeating: 0, count: displayBufferWidth * displayBufferHeight)
 
     init() {
-        let clock = GameBoyClock()
         let memory = GameBoyMemory()
-        let cpu = GameBoyCPU(addressBus: memory)
-        let ppu = GameBoyPPU(addressBus: memory)
 
-        self.clock = clock
         self.memory = memory
-        self.cpu = cpu
-        self.ppu = ppu
+        self.cpu = GameBoyCPU(addressBus: memory)
+        self.ppu = GameBoyPPU(addressBus: memory)
+
+        memory.joypad = joypad
     }
 
+    /// Runs one CPU instruction and lets the rest of the hardware catch up by the same
+    /// number of cycles. This is the heartbeat of the emulator: the CPU, PPU and timer are
+    /// independent machines that only stay in sync because they count the same cycles.
+    ///
+    /// - Returns: Whether the PPU completed a frame, and how many cycles passed.
+    @discardableResult
+    func step() -> (frameCompleted: Bool, cycles: Int) {
+        let tCycles = cpu.step()
+        memory.tickClock(cycles: tCycles)
+        return (ppu.step(cycles: tCycles), tCycles)
+    }
+
+    /// Runs the emulation until the PPU has finished drawing a frame.
+    func runFrame() {
+        // The cycle limit ends the frame when the game has switched the LCD off
+        var cycles = 0
+        while cycles < GameBoy.cyclesPerFrame {
+            let result = step()
+            if result.frameCompleted {
+                break
+            }
+            cycles += result.cycles
+        }
+    }
+
+    // ponytail: runs on the main actor. A frame takes well under a millisecond of host time
+    // in release builds; move it to a background task if debug builds stutter.
+    @MainActor
     func start(withROM data: Data) async {
         memory.loadCartridge(data: data)
 
-        while true {
-            do {
-                if cpu.isClockHalted || cpu.isClockStopped {
-                    try await Task.sleep(nanoseconds: 1_000_000_000)
-                    cpu.isClockStopped = false
-                    continue
-                }
+        let frameDuration = Duration.seconds(Double(GameBoy.cyclesPerFrame) / GameBoyClock.frequency)
+        var nextFrame = ContinuousClock.now
 
-                let tCycles = cpu.step()
-                ppu.step(cycles: tCycles)
-                try await clock.tick(cycles: tCycles)
-            } catch {
-                debugPrint(error.localizedDescription)
-            }
+        // Emulate a whole frame as fast as possible, then sleep until it is due. Sleeping
+        // after every instruction can't work: a sleep takes far longer than the ~1µs asked for.
+        while !Task.isCancelled {
+            runFrame()
+            frame = ppu.displayBuffer
+
+            nextFrame += frameDuration
+            try? await Task.sleep(until: nextFrame, clock: .continuous)
         }
     }
 }
