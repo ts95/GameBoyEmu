@@ -40,6 +40,8 @@ private let SERIAL_CONTROL_REGISTER: Int = 0xFF02
 private let TIMER_REGISTERS_START: Int = 0xFF04
 private let TIMER_REGISTERS_END: Int = 0xFF07
 private let INTERRUPT_FLAG_REGISTER: Int = 0xFF0F
+private let SOUND_REGISTERS_START: Int = 0xFF10
+private let SOUND_REGISTERS_END: Int = 0xFF3F
 private let DMA_REGISTER: Int = 0xFF46
 
 private let BANK_SIZE = 0x4000
@@ -88,6 +90,9 @@ class GameBoyMemory: AddressBusProtocol {
 
     /// The DIV/TIMA timer, mapped at 0xFF04-0xFF07.
     let clock = GameBoyClock()
+
+    /// The sound hardware, mapped at 0xFF10-0xFF3F.
+    let apu = GameBoyAPU()
 
     /// The buttons, readable through 0xFF00.
     var joypad: GameBoyJoypad?
@@ -166,6 +171,8 @@ class GameBoyMemory: AddressBusProtocol {
                 return clock[address]
             case INTERRUPT_FLAG_REGISTER:
                 return ioPorts[address - IO_PORTS_START] | 0xE0 // The unused upper bits read as 1
+            case SOUND_REGISTERS_START...SOUND_REGISTERS_END:
+                return apu[address]
             case IO_PORTS_START...IO_PORTS_END:
                 return ioPorts[address - IO_PORTS_START]
             case HRAM_START...HRAM_END:
@@ -213,6 +220,8 @@ class GameBoyMemory: AddressBusProtocol {
                 }
             case TIMER_REGISTERS_START...TIMER_REGISTERS_END:
                 clock[address] = newValue
+            case SOUND_REGISTERS_START...SOUND_REGISTERS_END:
+                apu[address] = newValue
             case DMA_REGISTER:
                 // Writing XX here makes the hardware copy 0xXX00-0xXX9F into OAM. Games do this
                 // every frame, it is how sprites get on screen.
@@ -249,29 +258,6 @@ class GameBoyMemory: AddressBusProtocol {
     }
 
     private func initializeHardware() {
-        // Sound Registers (disabled)
-        self[0xFF10] = 0x80 // NR10: Sound Mode 1 Register, sweep
-        self[0xFF11] = 0xBF // NR11: Sound Mode 1 Register, length/wave duty
-        self[0xFF12] = 0xF3 // NR12: Sound Mode 1 Register, envelope
-        self[0xFF13] = 0xFF // NR13: Sound Mode 1 Register, frequency lo
-        self[0xFF14] = 0xBF // NR14: Sound Mode 1 Register, frequency hi
-        self[0xFF16] = 0x3F // NR21: Sound Mode 2 Register, length/wave duty
-        self[0xFF17] = 0x00 // NR22: Sound Mode 2 Register, envelope
-        self[0xFF18] = 0xFF // NR23: Sound Mode 2 Register, frequency lo
-        self[0xFF19] = 0xBF // NR24: Sound Mode 2 Register, frequency hi
-        self[0xFF1A] = 0x7F // NR30: Sound Mode 3 Register, ON/OFF
-        self[0xFF1B] = 0xFF // NR31: Sound Mode 3 Register, length
-        self[0xFF1C] = 0x9F // NR32: Sound Mode 3 Register, output level
-        self[0xFF1D] = 0xFF // NR33: Sound Mode 3 Register, frequency lo
-        self[0xFF1E] = 0xBF // NR34: Sound Mode 3 Register, frequency hi
-        self[0xFF20] = 0xFF // NR41: Sound Mode 4 Register, length
-        self[0xFF21] = 0x00 // NR42: Sound Mode 4 Register, envelope
-        self[0xFF22] = 0x00 // NR43: Sound Mode 4 Register, polynomial counter
-        self[0xFF23] = 0xBF // NR44: Sound Mode 4 Register, counter/consecutive
-        self[0xFF24] = 0x77 // NR50: Channel control / ON-OFF / Volume
-        self[0xFF25] = 0xF3 // NR51: Selection of Sound output terminal
-        self[0xFF26] = 0xF1 // NR52: Sound on/off (enabled with no channels active)
-
         // LCD Registers (DMA is left alone, writing it would start a transfer)
         self[0xFF40] = 0x91 // LCDC: LCD Control
         self[0xFF41] = 0x00 // STAT: LCDC Status

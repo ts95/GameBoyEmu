@@ -33,14 +33,15 @@ class GameBoy: ObservableObject {
     }
 
     /// Runs one CPU instruction and lets the rest of the hardware catch up by the same
-    /// number of cycles. This is the heartbeat of the emulator: the CPU, PPU and timer are
-    /// independent machines that only stay in sync because they count the same cycles.
+    /// number of cycles. This is the heartbeat of the emulator: the CPU, PPU, timer and APU
+    /// are independent machines that only stay in sync because they count the same cycles.
     ///
     /// - Returns: Whether the PPU completed a frame, and how many cycles passed.
     @discardableResult
     func step() -> (frameCompleted: Bool, cycles: Int) {
         let tCycles = cpu.step()
         memory.tickClock(cycles: tCycles)
+        memory.apu.step(cycles: tCycles)
         return (ppu.step(cycles: tCycles), tCycles)
     }
 
@@ -65,6 +66,7 @@ class GameBoy: ObservableObject {
 
         let frameDuration = Duration.seconds(Double(GameBoy.cyclesPerFrame) / GameBoyClock.frequency)
         var nextFrame = ContinuousClock.now
+        let audio = AudioOutput()
 
         // Emulate a whole frame as fast as possible, then sleep until it is due. Sleeping
         // after every instruction can't work: a sleep takes far longer than the ~1µs asked for.
@@ -72,7 +74,13 @@ class GameBoy: ObservableObject {
             runFrame()
             frame = ppu.displayBuffer
 
+            audio.play(samples: memory.apu.pendingSamples)
+            memory.apu.pendingSamples.removeAll(keepingCapacity: true)
+
             nextFrame += frameDuration
+            if nextFrame < .now - .milliseconds(100) {
+                nextFrame = .now // After a long stall, carry on from here instead of fast-forwarding
+            }
             try? await Task.sleep(until: nextFrame, clock: .continuous)
         }
     }
