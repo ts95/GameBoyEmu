@@ -415,6 +415,33 @@ private func run(_ apu: GameBoyAPU, seconds: Double) {
     #expect(memory[0xFF68] & 0x3F == 4) // The index moved on by itself
 }
 
+@Test func colorGamesCanSwitchTheCPUToDoubleSpeed() throws {
+    // Request a switch, STOP to carry it out, then two NOPs
+    let gameBoy = try makeGameBoy(program: [0x3E, 0x01, 0xE0, 0x4D, 0x10, 0x00, 0x00, 0x00], isColor: true)
+    #expect(gameBoy.memory[0xFF4D] & 0x80 == 0)
+
+    #expect(try gameBoy.step().cycles == 8)  // LD A, 1
+    #expect(try gameBoy.step().cycles == 12) // LDH (0x4D), A
+    #expect(gameBoy.memory[0xFF4D] & 0x81 == 0x01) // Requested, not yet switched
+
+    _ = try gameBoy.step() // STOP
+    #expect(gameBoy.memory[0xFF4D] & 0x81 == 0x80) // Switched, and the request is cleared
+
+    // The same NOP now takes half as long as far as the PPU and sound chip are concerned
+    #expect(try gameBoy.step().cycles == 2)
+}
+
+@Test func stopDoesNotChangeSpeedUnlessASwitchWasRequested() throws {
+    let color = try makeGameBoy(program: [0x10, 0x00, 0x00], isColor: true)
+    _ = try color.step()
+    #expect(try color.step().cycles == 4)
+
+    // An original Game Boy has no speed switch at all
+    let original = try makeGameBoy(program: [0x3E, 0x01, 0xE0, 0x4D, 0x10, 0x00, 0x00])
+    for _ in 0..<3 { _ = try original.step() }
+    #expect(try original.step().cycles == 4)
+}
+
 @Test func hdmaCopiesEverythingAtOnceInGeneralPurposeMode() throws {
     let memory = try makeGameBoy(isColor: true).memory
     for offset in 0..<48 { memory[0xC000 + offset] = UInt8(offset + 1) }
@@ -619,6 +646,24 @@ private func run(_ apu: GameBoyAPU, seconds: Double) {
     }
 
     #expect(frames == 3)
+}
+
+@Test func emulatorCarriesOnWhereItWasStopped() async throws {
+    // A program that counts in register-backed RAM: INC (HL) in a loop, with HL = 0xC000
+    var rom = [UInt8](repeating: 0, count: 0x8000)
+    rom.replaceSubrange(0x100..<0x106, with: [0x21, 0x00, 0xC0, 0x34, 0x18, 0xFD]) // LD HL; INC (HL); JR -3
+
+    let emulator = Emulator()
+    for try await _ in emulator.run(rom: Data(rom), saveURL: nil) { break }
+
+    // Running again must not reload the cartridge. Proof: this "ROM" isn't one, and loading
+    // it would throw, but the machine already has its cartridge and simply continues.
+    var frames = 0
+    for try await _ in emulator.run(rom: Data(), saveURL: nil) {
+        frames += 1
+        if frames == 2 { break }
+    }
+    #expect(frames == 2)
 }
 
 // MARK: - Errors

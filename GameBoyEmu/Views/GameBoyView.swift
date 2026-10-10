@@ -9,8 +9,8 @@ import SwiftUI
 import SwiftData
 
 struct GameBoyView: View {
-    // @State keeps one model alive for the lifetime of the view
-    @State private var model = GameBoyViewModel()
+    /// The game's session. It is owned by whoever shows this view, so that it can outlive it.
+    let model: GameBoyViewModel
 
     /// The game to run. `nil` shows the console switched off.
     var game: Game?
@@ -288,5 +288,5 @@ struct JoypadButtonStyle: ButtonStyle {
 
 // No game: the preview only draws the console, it doesn't run anything
 #Preview {
-    GameBoyView(game: nil)
+    GameBoyView(model: GameBoyViewModel(), game: nil)
 }

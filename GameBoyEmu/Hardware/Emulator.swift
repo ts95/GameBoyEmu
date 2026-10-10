@@ -16,6 +16,8 @@ import Foundation
 /// - button presses go in through `setJoypad(_:)`
 actor Emulator {
     private let gameBoy = GameBoy()
+    /// Whether the machine already has its cartridge in, from an earlier call to `run`.
+    private var isCartridgeLoaded = false
     private var joypadQueue = JoypadQueue()
     private var isMuted = false
 
@@ -35,6 +37,10 @@ actor Emulator {
     ///
     /// The emulation runs for as long as someone is reading the stream. When the reader stops,
     /// for example because its task was cancelled, the stream ends and the emulation with it.
+    ///
+    /// Stopping only freezes the machine: everything about it stays in memory, exactly as it
+    /// was, for as long as this emulator exists. Calling `run` again carries on from that
+    /// point instead of starting the game over, and ignores `rom`.
     /// If the emulation can't start or can't go on, the stream ends by throwing a `GameBoyError`.
     ///
     /// - Parameters:
@@ -70,7 +76,12 @@ actor Emulator {
         frames: AsyncThrowingStream<[UInt32], any Error>.Continuation,
         onWarning: @Sendable (GameBoyError) -> Void
     ) async throws {
-        try gameBoy.loadCartridge(data: rom, save: readSave(from: saveURL))
+        if !isCartridgeLoaded {
+            try gameBoy.loadCartridge(data: rom, save: readSave(from: saveURL))
+            isCartridgeLoaded = true
+        }
+        // Whatever was held down when the machine was last frozen isn't held any more
+        joypadQueue = JoypadQueue()
 
         // The audio engine only exists while there is sound to play
         var audio: AudioOutput?

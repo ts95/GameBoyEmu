@@ -9,6 +9,8 @@ import UniformTypeIdentifiers
 /// The first thing the app shows: the games that can be played, and their save data.
 struct LibraryView: View {
     @State private var library = GameLibrary()
+    /// The games in progress, which keep their state while the library is showing.
+    @State private var sessions = GameSessions()
     /// The game being played, if any. Empty while the library itself is showing.
     @State private var path: [Game] = []
     @State private var isPickingROM = false
@@ -45,7 +47,7 @@ struct LibraryView: View {
                 }
             }
             .navigationDestination(for: Game.self) { game in
-                GameBoyView(game: game)
+                GameBoyView(model: sessions.model(for: game), game: game)
                     .navigationTitle(game.title)
                 #if os(iOS)
                     .navigationBarTitleDisplayMode(.inline)
@@ -67,7 +69,12 @@ struct LibraryView: View {
                 presenting: gameToDeleteSaveOf
             ) { game in
                 Button("Delete Save Data", role: .destructive) {
-                    perform { try library.deleteSave(of: game) }
+                    perform {
+                        try library.deleteSave(of: game)
+                        // A game in progress still holds its save in memory and would write
+                        // it back, so it has to start over too
+                        sessions.end(game)
+                    }
                 }
             } message: { _ in
                 Text("Your progress in this game will be lost. This can't be undone.")
@@ -142,7 +149,10 @@ struct LibraryView: View {
         .tint(.blue)
         if !game.isIncluded {
             Button("Remove", systemImage: "minus.circle") {
-                perform { try library.remove(game) }
+                perform {
+                    try library.remove(game)
+                    sessions.end(game)
+                }
             }
             .tint(.orange)
         }
@@ -185,6 +195,7 @@ struct LibraryView: View {
 
     private func play(_ game: Game) {
         library.markPlayed(game)
+        sessions.endIfFailed(game)
         path = [game]
     }
 
