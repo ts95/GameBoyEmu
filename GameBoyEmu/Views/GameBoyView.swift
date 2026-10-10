@@ -117,6 +117,10 @@ struct GameBoyView: View {
         .onChange(of: dPadState) { _, newState in
             model.joypad.dPadState = newState
         }
+        // A faint tick for each direction pressed, including when sliding from one to the next
+        .sensoryFeedback(.impact(flexibility: .rigid, intensity: 0.4), trigger: dPadState) { _, newState in
+            newState != .idle
+        }
     }
 
     var dPadTiltAxis: (x: CGFloat, y: CGFloat, z: CGFloat) {
@@ -238,6 +242,10 @@ struct JoypadButtonStyle: ButtonStyle {
             .animation(.spring(duration: 0.15), value: configuration.isPressed)
             .onChange(of: configuration.isPressed) { _, isPressed in
                 onPressChange(isPressed)
+            }
+            // A soft tap on the way down only; releasing is silent
+            .sensoryFeedback(.impact(flexibility: .soft, intensity: 0.6), trigger: configuration.isPressed) { _, isPressed in
+                isPressed
             }
     }
 }
