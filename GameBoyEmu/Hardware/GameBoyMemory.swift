@@ -44,6 +44,7 @@ private let SOUND_REGISTERS_START: Int = 0xFF10
 private let SOUND_REGISTERS_END: Int = 0xFF3F
 private let DMA_REGISTER: Int = 0xFF46
 
+private let SPEED_SWITCH_REGISTER: Int = 0xFF4D
 private let VRAM_BANK_REGISTER: Int = 0xFF4F
 private let HDMA_SOURCE_HIGH_REGISTER: Int = 0xFF51
 private let HDMA_SOURCE_LOW_REGISTER: Int = 0xFF52
@@ -111,6 +112,13 @@ class GameBoyMemory: AddressBusProtocol {
     // index register and a data register.
     var backgroundPalettes = [UInt8](repeating: 0xFF, count: 64)
     var objectPalettes = [UInt8](repeating: 0xFF, count: 64)
+
+    /// Whether the CPU currently runs at twice its normal speed, which a Game Boy Color
+    /// game can switch on to get more done per frame.
+    private(set) var isDoubleSpeed = false
+    /// Set by the game through the speed switch register; the switch itself happens at
+    /// the next STOP instruction.
+    private var isSpeedSwitchRequested = false
 
     // HDMA: a Game Boy Color feature that copies data from ROM or RAM into video RAM.
     // The addresses advance as blocks of 16 bytes are copied.
@@ -236,6 +244,9 @@ class GameBoyMemory: AddressBusProtocol {
                 return ioPorts[address - IO_PORTS_START] | 0xE0 // The unused upper bits read as 1
             case SOUND_REGISTERS_START...SOUND_REGISTERS_END:
                 return apu[address]
+            case SPEED_SWITCH_REGISTER where isColorMode:
+                // Bit 7: the current speed. Bit 0: whether a switch has been requested.
+                return (isDoubleSpeed ? 0x80 : 0) | 0x7E | (isSpeedSwitchRequested ? 0x01 : 0)
             case VRAM_BANK_REGISTER where isColorMode:
                 return UInt8(vramBank) | 0xFE
             case WRAM_BANK_REGISTER where isColorMode:
@@ -305,6 +316,8 @@ class GameBoyMemory: AddressBusProtocol {
                 for offset in 0..<oam.count {
                     oam[offset] = self[source + offset]
                 }
+            case SPEED_SWITCH_REGISTER where isColorMode:
+                isSpeedSwitchRequested = newValue & 0x01 != 0
             case VRAM_BANK_REGISTER where isColorMode:
                 vramBank = Int(newValue & 0x01)
             case WRAM_BANK_REGISTER where isColorMode:
@@ -364,6 +377,8 @@ class GameBoyMemory: AddressBusProtocol {
         bank1High = 0
         transferBlocksRemaining = 0
         isHBlankTransferActive = false
+        isDoubleSpeed = false
+        isSpeedSwitchRequested = false
 
         // A Color game sets its own palettes. An original game gets the ones the Game Boy
         // Color's boot program would pick for it: background palette 0 and sprite palettes
@@ -506,6 +521,15 @@ class GameBoyMemory: AddressBusProtocol {
         }
     }
 
+    func switchSpeedIfRequested() {
+        guard isSpeedSwitchRequested else {
+            return
+        }
+        isDoubleSpeed.toggle()
+        isSpeedSwitchRequested = false
+        clock[TIMER_REGISTERS_START] = 0 // The switch also resets DIV
+    }
+
     func horizontalBlankDidStart() {
         if isHBlankTransferActive {
             transferBlock()
@@ -558,4 +582,8 @@ protocol AddressBusProtocol {
 
     /// Called by the PPU each time it finishes drawing a visible scanline.
     func horizontalBlankDidStart()
+
+    /// Called by the CPU when it executes STOP, which on a Game Boy Color carries out a
+    /// CPU speed switch the game has asked for.
+    func switchSpeedIfRequested()
 }

@@ -48,11 +48,16 @@ final class GameBoy {
     /// number of cycles. This is the heartbeat of the emulator: the CPU, PPU, timer and APU
     /// are independent machines that only stay in sync because they count the same cycles.
     ///
-    /// - Returns: Whether the PPU completed a frame, and how many cycles passed.
+    /// - Returns: Whether the PPU completed a frame, and how many cycles passed for the PPU.
     @discardableResult
     func step() throws -> (frameCompleted: Bool, cycles: Int) {
-        let tCycles = try cpu.step()
-        memory.tickClock(cycles: tCycles)
+        let cpuCycles = try cpu.step()
+        memory.tickClock(cycles: cpuCycles)
+
+        // In double-speed mode the CPU and the timer run at twice the clock rate, while the
+        // PPU and the sound chip keep their normal pace. So the same instruction takes half
+        // as long from their point of view, and the CPU gets twice as much done per frame.
+        let tCycles = memory.isDoubleSpeed ? cpuCycles / 2 : cpuCycles
         memory.apu.step(cycles: tCycles)
         return (ppu.step(cycles: tCycles), tCycles)
     }

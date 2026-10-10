@@ -1240,8 +1240,10 @@ class GameBoyCPU<AddressBus: AddressBusProtocol> {
             return instruction.cycles.count()
 
         case .stopSystemAndMainClocks:
-            // ponytail: STOP is treated as a 2-byte NOP. Real hardware sleeps until a button
-            // is pressed; emulate that if a game turns out to rely on it.
+            // On a Game Boy Color, STOP is how a game switches CPU speed after asking for it.
+            // ponytail: otherwise it is treated as a 2-byte NOP. Real hardware sleeps until a
+            // button is pressed; emulate that if a game turns out to rely on it.
+            addressBus.switchSpeedIfRequested()
             pc &+= 1
             return instruction.cycles.count()
 
