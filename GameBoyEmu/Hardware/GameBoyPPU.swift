@@ -53,7 +53,7 @@ enum PPUMode {
 /// It operates based on a sequence of states known as the PPU mode, which include HBlank, VBlank, OAM Search, and Pixel Transfer.
 ///
 /// - Note: The PPU interacts closely with video RAM (VRAM) and Object Attribute Memory (OAM), and generates interrupts during VBlank and HBlank periods.
-class GameBoyPPU<AddressBus: AddressBusProtocol>: ObservableObject {
+class GameBoyPPU<AddressBus: AddressBusProtocol> {
 
     var addressBus: AddressBus
 
@@ -62,7 +62,7 @@ class GameBoyPPU<AddressBus: AddressBusProtocol>: ObservableObject {
     /// - `.vBlank`: The PPU is in the vertical blank period.
     /// - `.oamSearch`: The PPU is searching OAM for sprites.
     /// - `.pixelTransfer`: The PPU is transferring pixel data to the display.
-    @Published var mode = PPUMode.oamSearch
+    var mode = PPUMode.oamSearch
 
     /// The number of clock cycles the PPU has spent in the current mode.
     ///
@@ -80,7 +80,15 @@ class GameBoyPPU<AddressBus: AddressBusProtocol>: ObservableObject {
     ///
     /// This property is an array of 160x144 elements, each representing a pixel on the Game Boy display.
     /// The buffer is used to store the rendered pixel values before they are displayed on the screen.
-    @Published var displayBuffer: [UInt8] = Array(repeating: 0, count: displayBufferWidth * displayBufferHeight)
+    var displayBuffer: [UInt8] = Array(repeating: 0, count: displayBufferWidth * displayBufferHeight)
+
+    /// The background/window color numbers (before the palette) of the scanline being drawn.
+    /// Sprites need them, because a sprite can ask to be drawn behind non-zero background pixels.
+    private var lineColorNumbers: [UInt8] = Array(repeating: 0, count: displayBufferWidth)
+
+    /// How many window lines have been drawn this frame. The window keeps its own line counter,
+    /// it does not simply follow the scanline number.
+    private var windowLine = 0
 
     init(addressBus: AddressBus) {
         self.addressBus = addressBus
@@ -98,50 +106,97 @@ class GameBoyPPU<AddressBus: AddressBusProtocol>: ObservableObject {
 
     /// Advances the PPU by the given number of cycles.
     ///
+    /// The PPU is not something the game calls into. It is a separate machine that keeps
+    /// drawing 60 frames per second on its own, and the game finds out where it is by
+    /// reading the LY (0xFF44) and STAT (0xFF41) registers or by waiting for interrupts.
+    ///
     /// - Parameter cycles: The number of cycles to advance the PPU.
-    func step(cycles: Int) {
+    /// - Returns: `true` when a frame was just completed (the PPU entered VBlank).
+    @discardableResult
+    func step(cycles: Int) -> Bool {
+        guard addressBus[0xFF40] & 0x80 != 0 else {
+            // Bit 7 of LCDC switches the whole LCD off. The PPU then stops and LY stays at 0.
+            modeClock = 0
+            currentScanline = 0
+            windowLine = 0
+            mode = .oamSearch
+            addressBus[0xFF44] = 0
+            addressBus[0xFF41] &= 0xF8
+            return false
+        }
+
         modeClock += cycles
 
         switch mode {
         case .oamSearch:
             if modeClock >= 80 {
-                modeClock %= 80
-                mode = .pixelTransfer
+                modeClock -= 80
+                enter(mode: .pixelTransfer)
             }
         case .pixelTransfer:
             if modeClock >= 172 {
-                modeClock %= 172
-                mode = .hBlank
+                modeClock -= 172
                 renderScanline()
+                enter(mode: .hBlank)
             }
         case .hBlank:
             if modeClock >= 204 {
-                modeClock %= 204
+                modeClock -= 204
                 currentScanline += 1
 
                 if currentScanline == displayBufferHeight {
-                    mode = .vBlank
-                    triggerVBlankInterrupt()
+                    enter(mode: .vBlank)
+                    addressBus[0xFF0F] |= 0x01 // Request the VBlank interrupt (bit 0 of IF)
+                    return true
                 } else {
-                    mode = .oamSearch
+                    enter(mode: .oamSearch)
                 }
             }
         case .vBlank:
             if modeClock >= 456 {
-                modeClock %= 456
+                modeClock -= 456
                 currentScanline += 1
 
                 if currentScanline > 153 {
-                    mode = .oamSearch
                     currentScanline = 0
+                    windowLine = 0
+                    enter(mode: .oamSearch)
+                } else {
+                    enter(mode: .vBlank) // Same mode, but LY has to be updated
                 }
             }
         }
+
+        return false
     }
 
-    private func triggerVBlankInterrupt() {
-        // Set the VBlank interrupt flag (bit 0) in the IF register
-        addressBus[0xFF0F] |= 0x01
+    /// Switches mode and publishes the PPU's position to the LY and STAT registers,
+    /// requesting the LCD STAT interrupt if the game asked for one.
+    private func enter(mode newMode: PPUMode) {
+        let modeChanged = mode != newMode
+        let lineChanged = addressBus[0xFF44] != currentScanline
+        mode = newMode
+
+        let modeBits: UInt8
+        let modeInterruptEnableBit: UInt8
+        switch newMode {
+        case .hBlank:        (modeBits, modeInterruptEnableBit) = (0, 0x08)
+        case .vBlank:        (modeBits, modeInterruptEnableBit) = (1, 0x10)
+        case .oamSearch:     (modeBits, modeInterruptEnableBit) = (2, 0x20)
+        case .pixelTransfer: (modeBits, modeInterruptEnableBit) = (3, 0x00)
+        }
+
+        let isLineCompareMatch = currentScanline == addressBus[0xFF45] // LY == LYC
+        // Bits 3-6 of STAT belong to the game (interrupt enables), bits 0-2 belong to the PPU
+        let stat = (addressBus[0xFF41] & 0x78) | (isLineCompareMatch ? 0x04 : 0) | modeBits
+
+        addressBus[0xFF44] = currentScanline
+        addressBus[0xFF41] = stat
+
+        if (modeChanged && stat & modeInterruptEnableBit != 0) ||
+            (lineChanged && isLineCompareMatch && stat & 0x40 != 0) {
+            addressBus[0xFF0F] |= 0x02 // Request the LCD STAT interrupt (bit 1 of IF)
+        }
     }
 
     /// Retrieves the actual color value from the palette based on the color number.
@@ -155,43 +210,52 @@ class GameBoyPPU<AddressBus: AddressBusProtocol>: ObservableObject {
     /// - Bits 5-4: Color 2
     /// - Bits 7-6: Color 3 (darkest)
     ///
-    /// The method extracts the appropriate color bits from the palette and combines them to return the final color value.
-    ///
     /// - Parameters:
     ///   - colorNum: The 2-bit color number (0 to 3) for the pixel.
     ///   - paletteAddr: The address of the palette register in addressBus.
     /// - Returns: The 2-bit color value extracted from the palette.
     private func getColor(colorNum: UInt8, paletteAddr: Int) -> UInt8 {
-        let palette = addressBus[paletteAddr] // Palette data
-        let hi = (palette >> (colorNum * 2 + 1)) & 1 // High bit of the color number
-        let lo = (palette >> (colorNum * 2)) & 1 // Low bit of the color number
-        return (hi << 1) | lo // Combine high and low bits to get the actual color
+        (addressBus[paletteAddr] >> (colorNum * 2)) & 0x03
     }
 
     private func renderScanline() {
         // Render the current scanline to the display buffer
         let lcdc = addressBus[0xFF40] // LCD Control register
-        let scx = addressBus[0xFF43]  // Scroll X register
-        let scy = addressBus[0xFF42]  // Scroll Y register
-        let ly = currentScanline  // Current scanline
+        let ly = Int(currentScanline) // Current scanline
 
         // Determine if background/window and sprites are enabled
-        let bgEnabled = lcdc & 0x01 != 0      // Bit 0 of LCDC: Background display
+        let bgEnabled = lcdc & 0x01 != 0      // Bit 0 of LCDC: Background and window display
         let windowEnabled = lcdc & 0x20 != 0  // Bit 5 of LCDC: Window display
         let spritesEnabled = lcdc & 0x02 != 0 // Bit 1 of LCDC: Sprite display
 
-        // Render background
-        if bgEnabled {
-            renderBackgroundLine(scx: scx, scy: scy, ly: ly)
+        // The window is a second background layer that doesn't scroll, drawn on top of the
+        // background from (WX - 7, WY) to the bottom right corner. Games use it for HUDs and menus.
+        let windowX = Int(addressBus[0xFF4B]) - 7 // WX is offset by 7
+        let isWindowVisible = bgEnabled && windowEnabled && ly >= Int(addressBus[0xFF4A]) && windowX < displayBufferWidth
+
+        let bgTileMapBase = (lcdc & 0x08 != 0) ? 0x9C00 : 0x9800     // Bit 3 of LCDC: Background tile map
+        let windowTileMapBase = (lcdc & 0x40 != 0) ? 0x9C00 : 0x9800 // Bit 6 of LCDC: Window tile map
+        let scx = Int(addressBus[0xFF43]) // Scroll X register
+        let scy = Int(addressBus[0xFF42]) // Scroll Y register
+
+        for x in 0..<displayBufferWidth {
+            let colorNum: UInt8
+            if isWindowVisible && x >= windowX {
+                colorNum = tileColorNumber(tileMapBase: windowTileMapBase, x: x - windowX, y: windowLine)
+            } else if bgEnabled {
+                // The background is a 256x256 pixel map that wraps around; SCX/SCY pick which
+                // part of it is visible through the 160x144 screen.
+                colorNum = tileColorNumber(tileMapBase: bgTileMapBase, x: (x + scx) % 256, y: (ly + scy) % 256)
+            } else {
+                colorNum = 0
+            }
+
+            lineColorNumbers[x] = colorNum
+            displayBuffer[ly * displayBufferWidth + x] = getColor(colorNum: colorNum, paletteAddr: 0xFF47)
         }
 
-        // Render window (if enabled and visible)
-        if windowEnabled {
-            let wy = addressBus[0xFF4A]     // Window Y position
-            let wx = addressBus[0xFF4B] - 7 // Window X position, offset by 7 as the window position starts at WX=7
-            if ly >= wy {
-                renderWindowLine(wx: wx, wy: wy, ly: ly)
-            }
+        if isWindowVisible {
+            windowLine += 1
         }
 
         // Render sprites
@@ -200,132 +264,79 @@ class GameBoyPPU<AddressBus: AddressBusProtocol>: ObservableObject {
         }
     }
 
-    /// Renders the background line for the given scanline (ly).
+    /// Looks up the color number (0-3) of one pixel of a 256x256 tile map.
+    ///
+    /// A tile map doesn't contain pixels. It is a 32x32 grid of tile numbers, and each tile
+    /// number refers to an 8x8 pixel picture stored elsewhere in VRAM (2 bytes per row of pixels).
     ///
     /// - Parameters:
-    ///   - scx: The scroll X value.
-    ///   - scy: The scroll Y value.
-    ///   - ly: The current scanline.
-    private func renderBackgroundLine(scx: UInt8, scy: UInt8, ly: UInt8) {
-        let lcdc = addressBus[0xFF40] // LCD Control register
-        let tileMapBase = (lcdc & 0x08 != 0) ? 0x9C00 : 0x9800 // Bit 3 of LCDC: Background Tile Map Display Select
-        let tileDataBase = (lcdc & 0x10 != 0) ? 0x8000 : 0x8800 // Bit 4 of LCDC: Background & Window Tile Data Select
+    ///   - tileMapBase: The address of the tile map, 0x9800 or 0x9C00.
+    ///   - x: The horizontal pixel position in the map.
+    ///   - y: The vertical pixel position in the map.
+    private func tileColorNumber(tileMapBase: Int, x: Int, y: Int) -> UInt8 {
+        let tileIndex = addressBus[tileMapBase + (y / 8) * 32 + x / 8] // 32 tiles per row
 
-        let yPos = UInt16((UInt16(ly) + UInt16(scy)) % 256) // Vertical position in the background, wrapping at 256
-        let tileRow = yPos / 8 // Each tile is 8 pixels high
-
-        for x in 0..<displayBufferWidth {
-            let xPos = UInt16((UInt16(x) + UInt16(scx)) % 256) // Horizontal position in the background, wrapping at 256
-            let tileCol = xPos / 8 // Each tile is 8 pixels wide
-            let tileIndexAddr = UInt16(tileMapBase) + tileRow * 32 + tileCol // Calculate the tile index address (32 tiles per row)
-            let tileIndex = addressBus[Int(tileIndexAddr)]
-
-            let tileAddr: UInt16
-            if tileDataBase == 0x8000 {
-                tileAddr = UInt16(tileDataBase) + UInt16(tileIndex) * 16 // Each tile is 16 bytes
-            } else {
-                tileAddr = UInt16(tileDataBase) + (UInt16(Int8(bitPattern: tileIndex)) + 128) * 16 // Signed tile index offset by 128
-            }
-
-            let lineInTile = yPos % 8 // Current line in the tile (0-7)
-            let data1 = addressBus[Int(tileAddr) + Int(lineInTile) * 2] // Tile data for the current line
-            let data2 = addressBus[Int(tileAddr) + Int(lineInTile) * 2 + 1]
-
-            let colorBit = 7 - (xPos % 8) // Bit position in the data byte (0-7)
-            let colorNum = ((data2 >> colorBit) & 1) << 1 | ((data1 >> colorBit) & 1) // Calculate color number (2 bits)
-
-            let color = getColor(colorNum: colorNum, paletteAddr: 0xFF47) // Get the actual color from the palette
-            displayBuffer[Int(ly) * displayBufferWidth + x] = color // Write the color to the display buffer
-        }
-    }
-
-    /// Renders the window line for the given scanline (ly).
-    ///
-    /// - Parameters:
-    ///   - wx: The window X position.
-    ///   - wy: The window Y position.
-    ///   - ly: The current scanline.
-    private func renderWindowLine(wx: UInt8, wy: UInt8, ly: UInt8) {
-        if wx >= displayBufferWidth || wy >= displayBufferHeight || ly < wy {
-            return // If the window is out of bounds or not yet visible, do nothing
+        let tileAddr: Int
+        if addressBus[0xFF40] & 0x10 != 0 { // Bit 4 of LCDC: Background & window tile data select
+            tileAddr = 0x8000 + Int(tileIndex) * 16 // Each tile is 16 bytes
+        } else {
+            tileAddr = 0x9000 + Int(Int8(bitPattern: tileIndex)) * 16 // Signed tile index around 0x9000
         }
 
-        let lcdc = addressBus[0xFF40] // LCD Control register
-        let tileMapBase = (lcdc & 0x40 != 0) ? 0x9C00 : 0x9800 // Bit 6 of LCDC: Window Tile Map Display Select
-        let tileDataBase = (lcdc & 0x10 != 0) ? 0x8000 : 0x8800 // Bit 4 of LCDC: Background & Window Tile Data Select
+        let data1 = addressBus[tileAddr + (y % 8) * 2] // Tile data for the current line
+        let data2 = addressBus[tileAddr + (y % 8) * 2 + 1]
 
-        let yPos = UInt16(ly - wy) // Vertical position in the window
-        let tileRow = yPos / 8 // Each tile is 8 pixels high
-
-        for x in 0..<displayBufferWidth {
-            let xPos = UInt16(x + Int(wx) - 7) // Horizontal position in the window, offset by 7
-            if xPos >= displayBufferWidth {
-                continue // If the x position is out of bounds, skip
-            }
-            let tileCol = xPos / 8 // Each tile is 8 pixels wide
-            let tileIndexAddr = UInt16(tileMapBase) + tileRow * 32 + tileCol // Calculate the tile index address (32 tiles per row)
-            let tileIndex = addressBus[Int(tileIndexAddr)]
-
-            let tileAddr: UInt16
-            if tileDataBase == 0x8000 {
-                tileAddr = UInt16(tileDataBase) + UInt16(tileIndex) * 16 // Each tile is 16 bytes
-            } else {
-                tileAddr = UInt16(tileDataBase) + (UInt16(Int8(bitPattern: tileIndex)) + 128) * 16 // Signed tile index offset by 128
-            }
-
-            let lineInTile = yPos % 8 // Current line in the tile (0-7)
-            let data1 = addressBus[Int(tileAddr) + Int(lineInTile) * 2] // Tile data for the current line
-            let data2 = addressBus[Int(tileAddr) + Int(lineInTile) * 2 + 1]
-
-            let colorBit = 7 - (xPos % 8) // Bit position in the data byte (0-7)
-            let colorNum = ((data2 >> colorBit) & 1) << 1 | ((data1 >> colorBit) & 1) // Calculate color number (2 bits)
-
-            let color = getColor(colorNum: colorNum, paletteAddr: 0xFF47) // Get the actual color from the palette
-            displayBuffer[Int(ly) * displayBufferWidth + Int(xPos)] = color // Write the color to the display buffer
-        }
+        let colorBit = 7 - (x % 8) // The leftmost pixel is stored in bit 7
+        return ((data2 >> colorBit) & 1) << 1 | ((data1 >> colorBit) & 1)
     }
 
     /// Renders the sprites for the given scanline (ly).
     ///
     /// - Parameter ly: The current scanline.
-    private func renderSpritesLine(ly: UInt8) {
+    private func renderSpritesLine(ly: Int) {
         let lcdc = addressBus[0xFF40] // LCD Control register
         let spriteHeight = (lcdc & 0x04 != 0) ? 16 : 8 // Bit 2 of LCDC: Sprite size (8x16 or 8x8)
 
-        for i in 0..<40 { // Maximum of 40 sprites
+        // ponytail: no 10-sprites-per-line limit and no X-coordinate priority. Earlier OAM
+        // entries simply win, which is what drawing them last achieves.
+        for i in (0..<40).reversed() { // Maximum of 40 sprites
             let spriteAddr = 0xFE00 + i * 4 // Each sprite uses 4 bytes in OAM
-            let yPos = Int(addressBus[spriteAddr]) - spriteHeight // Y position of the sprite (offset by sprite height)
+            let yPos = Int(addressBus[spriteAddr]) - 16 // Y position is always offset by 16, even for 8x8 sprites
             let xPos = Int(addressBus[spriteAddr + 1]) - 8 // X position of the sprite (offset by 8)
-            let tileIndex = addressBus[spriteAddr + 2] // Tile index
+            var tileIndex = Int(addressBus[spriteAddr + 2]) // Tile index
             let attributes = addressBus[spriteAddr + 3] // Sprite attributes
 
-            if ly >= yPos && ly < yPos + spriteHeight {
-                // Check if the current scanline intersects with the sprite
+            guard ly >= yPos && ly < yPos + spriteHeight else {
+                continue // The current scanline doesn't intersect with the sprite
+            }
 
-                // Bit 6 of attributes: Vertical flip
-                let lineInTile = (attributes & 0x40 != 0) ? spriteHeight - 1 - Int(ly) - yPos : Int(ly) - yPos
-                let tileAddr = 0x8000 + UInt16(tileIndex) * 16 // Each tile is 16 bytes
-                let data1 = addressBus[Int(tileAddr) + Int(lineInTile) * 2] // Tile data for the current line
-                let data2 = addressBus[Int(tileAddr) + Int(lineInTile) * 2 + 1]
+            // Bit 6 of attributes: Vertical flip
+            let lineInTile = (attributes & 0x40 != 0) ? spriteHeight - 1 - (ly - yPos) : ly - yPos
+            if spriteHeight == 16 {
+                tileIndex &= 0xFE // A tall sprite is two consecutive tiles starting at an even index
+            }
+            let tileAddr = 0x8000 + tileIndex * 16 // Each tile is 16 bytes
+            let data1 = addressBus[tileAddr + lineInTile * 2] // Tile data for the current line
+            let data2 = addressBus[tileAddr + lineInTile * 2 + 1]
 
-                for x in 0..<8 {
-                    // Bit 5 of attributes: Horizontal flip
-                    let colorBit = (attributes & 0x20 != 0) ? x : 7 - x
-                    let colorNum = ((data2 >> colorBit) & 1) << 1 | ((data1 >> colorBit) & 1) // Calculate color number (2 bits)
+            for x in 0..<8 {
+                // Bit 5 of attributes: Horizontal flip
+                let colorBit = (attributes & 0x20 != 0) ? x : 7 - x
+                let colorNum = ((data2 >> colorBit) & 1) << 1 | ((data1 >> colorBit) & 1) // Calculate color number (2 bits)
+                let xPixel = xPos + x
 
-                    if colorNum == 0 {
-                        continue // Color number 0 is transparent
-                    }
-
-                    // Bit 4 of attributes: Palette number
-                    let paletteAddr = attributes & 0x10 != 0 ? 0xFF49 : 0xFF48
-                    let color = getColor(colorNum: colorNum, paletteAddr: paletteAddr)
-                    let xPixel = xPos + x
-
-                    if (0..<displayBufferWidth).contains(xPixel) {
-                        displayBuffer[Int(ly) * displayBufferWidth + xPixel] = color // Write the color to the display buffer
-                    }
+                guard colorNum != 0, (0..<displayBufferWidth).contains(xPixel) else {
+                    continue // Color number 0 is transparent
                 }
+
+                // Bit 7 of attributes: the sprite hides behind background colors 1-3
+                if attributes & 0x80 != 0 && lineColorNumbers[xPixel] != 0 {
+                    continue
+                }
+
+                // Bit 4 of attributes: Palette number
+                let paletteAddr = attributes & 0x10 != 0 ? 0xFF49 : 0xFF48
+                displayBuffer[ly * displayBufferWidth + xPixel] = getColor(colorNum: colorNum, paletteAddr: paletteAddr)
             }
         }
     }
