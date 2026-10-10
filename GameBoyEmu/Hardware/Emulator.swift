@@ -30,7 +30,7 @@ actor Emulator {
         self.isMuted = isMuted
     }
 
-    /// Starts the emulation and returns its frames, one array of colors (0-3) per frame.
+    /// Starts the emulation and returns its frames, one array of pixels per frame.
     ///
     /// The emulation runs for as long as someone is reading the stream. When the reader stops,
     /// for example because its task was cancelled, the stream ends and the emulation with it.
@@ -45,7 +45,7 @@ actor Emulator {
         rom: Data,
         saveURL: URL?,
         onWarning: @escaping @Sendable (GameBoyError) -> Void = { _ in }
-    ) -> AsyncThrowingStream<[UInt8], any Error> {
+    ) -> AsyncThrowingStream<[UInt32], any Error> {
         // Only the newest frame is kept: if the UI falls behind it skips frames instead of
         // slowing the emulation (and the audio) down
         AsyncThrowingStream(bufferingPolicy: .bufferingNewest(1)) { continuation in
@@ -66,10 +66,10 @@ actor Emulator {
     private func emulate(
         rom: Data,
         saveURL: URL?,
-        frames: AsyncThrowingStream<[UInt8], any Error>.Continuation,
+        frames: AsyncThrowingStream<[UInt32], any Error>.Continuation,
         onWarning: @Sendable (GameBoyError) -> Void
     ) async throws {
-        try gameBoy.memory.loadCartridge(data: rom, save: readSave(from: saveURL))
+        try gameBoy.loadCartridge(data: rom, save: readSave(from: saveURL))
 
         // The audio engine only exists while there is sound to play
         var audio: AudioOutput?

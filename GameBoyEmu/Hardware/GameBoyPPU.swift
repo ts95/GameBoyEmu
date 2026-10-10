@@ -10,12 +10,8 @@ import Foundation
 let displayBufferWidth = 160
 let displayBufferHeight = 144
 
-enum PixelColor: UInt8 {
-    case light
-    case lightGray
-    case darkGray
-    case dark
-}
+/// The four shades of the original Game Boy's screen, lightest first, as display buffer pixels.
+let monochromeColors: [UInt32] = ([0xE6, 0xB3, 0x4D, 0x00] as [UInt32]).map { 0xFF00_0000 | $0 << 16 | $0 << 8 | $0 }
 
 /// The PPU mode states.
 ///
@@ -79,12 +75,17 @@ class GameBoyPPU<AddressBus: AddressBusProtocol> {
     /// The display buffer that holds the pixel data for the entire screen.
     ///
     /// This property is an array of 160x144 elements, each representing a pixel on the Game Boy display.
-    /// The buffer is used to store the rendered pixel values before they are displayed on the screen.
-    var displayBuffer: [UInt8] = Array(repeating: 0, count: displayBufferWidth * displayBufferHeight)
+    /// A pixel is a ready-to-show color: its bytes in memory are red, green, blue and an unused
+    /// fourth byte. An original Game Boy game only ever produces the four `monochromeColors`.
+    var displayBuffer: [UInt32] = Array(repeating: monochromeColors[0], count: displayBufferWidth * displayBufferHeight)
 
     /// The background/window color numbers (before the palette) of the scanline being drawn.
     /// Sprites need them, because a sprite can ask to be drawn behind non-zero background pixels.
     private var lineColorNumbers: [UInt8] = Array(repeating: 0, count: displayBufferWidth)
+
+    /// Whether each background/window pixel of the scanline comes from a tile that asks to be
+    /// drawn in front of all sprites (Game Boy Color only).
+    private var lineHasPriority: [Bool] = Array(repeating: false, count: displayBufferWidth)
 
     /// How many window lines have been drawn this frame. The window keeps its own line counter,
     /// it does not simply follow the scanline number.
@@ -92,16 +93,6 @@ class GameBoyPPU<AddressBus: AddressBusProtocol> {
 
     init(addressBus: AddressBus) {
         self.addressBus = addressBus
-    }
-
-    /// Returns the color value of a pixel given its coordinates.
-    subscript(x: Int, y: Int) -> PixelColor {
-        get {
-            return PixelColor(rawValue: displayBuffer[y * displayBufferWidth + x])!
-        }
-        set(color) {
-            displayBuffer[y * displayBufferWidth + x] = color.rawValue
-        }
     }
 
     /// Advances the PPU by the given number of cycles.
@@ -199,32 +190,45 @@ class GameBoyPPU<AddressBus: AddressBusProtocol> {
         }
     }
 
-    /// Retrieves the actual color value from the palette based on the color number.
+    /// Turns a color number (0-3) into a display buffer pixel on an original Game Boy.
     ///
-    /// The Game Boy uses a 2-bit color format to represent four possible colors. Each pixel color is determined by a 2-bit value
-    /// (ranging from 0 to 3), where 0 represents the lightest color and 3 represents the darkest color. The color values are stored
-    /// in the palette register, where each color occupies two bits. The palette register's format is as follows:
-    ///
-    /// - Bits 1-0: Color 0 (lightest)
-    /// - Bits 3-2: Color 1
-    /// - Bits 5-4: Color 2
-    /// - Bits 7-6: Color 3 (darkest)
+    /// The palette register maps each color number to one of four shades, two bits each:
+    /// bits 1-0 for color number 0, up to bits 7-6 for color number 3.
     ///
     /// - Parameters:
     ///   - colorNum: The 2-bit color number (0 to 3) for the pixel.
     ///   - paletteAddr: The address of the palette register in addressBus.
-    /// - Returns: The 2-bit color value extracted from the palette.
-    private func getColor(colorNum: UInt8, paletteAddr: Int) -> UInt8 {
-        (addressBus[paletteAddr] >> (colorNum * 2)) & 0x03
+    private func monochromeColor(colorNum: UInt8, paletteAddr: Int) -> UInt32 {
+        monochromeColors[Int((addressBus[paletteAddr] >> (colorNum * 2)) & 0x03)]
+    }
+
+    /// Turns a color number (0-3) into a display buffer pixel on a Game Boy Color.
+    ///
+    /// There are 8 background and 8 sprite palettes of 4 colors each, and every tile or sprite
+    /// says which one it uses. A color is 15 bits: 5 each of red, green and blue.
+    ///
+    /// ponytail: the 5-bit channels are stretched straight to 8 bits. The real LCD is more
+    /// washed out; add a color correction curve here if the colors look too saturated.
+    private func color(colorNum: UInt8, palette: Int, isObject: Bool) -> UInt32 {
+        let entry = addressBus.colorPaletteEntry(isObject: isObject, index: palette * 4 + Int(colorNum))
+
+        func channel(_ shift: UInt16) -> UInt32 {
+            let value = UInt32((entry >> shift) & 0x1F)
+            return value << 3 | value >> 2
+        }
+        return 0xFF00_0000 | channel(10) << 16 | channel(5) << 8 | channel(0)
     }
 
     private func renderScanline() {
         // Render the current scanline to the display buffer
         let lcdc = addressBus[0xFF40] // LCD Control register
         let ly = Int(currentScanline) // Current scanline
+        let isColorMode = addressBus.isColorMode
 
-        // Determine if background/window and sprites are enabled
-        let bgEnabled = lcdc & 0x01 != 0      // Bit 0 of LCDC: Background and window display
+        // Bit 0 of LCDC switches the background and window off on an original Game Boy.
+        // On a Game Boy Color they are always drawn, and the bit instead decides whether
+        // they can ever cover a sprite.
+        let bgEnabled = isColorMode || lcdc & 0x01 != 0
         let windowEnabled = lcdc & 0x20 != 0  // Bit 5 of LCDC: Window display
         let spritesEnabled = lcdc & 0x02 != 0 // Bit 1 of LCDC: Sprite display
 
@@ -239,19 +243,20 @@ class GameBoyPPU<AddressBus: AddressBusProtocol> {
         let scy = Int(addressBus[0xFF42]) // Scroll Y register
 
         for x in 0..<displayBufferWidth {
-            let colorNum: UInt8
+            var pixel: (colorNumber: UInt8, attributes: UInt8) = (0, 0)
             if isWindowVisible && x >= windowX {
-                colorNum = tileColorNumber(tileMapBase: windowTileMapBase, x: x - windowX, y: windowLine)
+                pixel = tilePixel(tileMapBase: windowTileMapBase, x: x - windowX, y: windowLine)
             } else if bgEnabled {
                 // The background is a 256x256 pixel map that wraps around; SCX/SCY pick which
                 // part of it is visible through the 160x144 screen.
-                colorNum = tileColorNumber(tileMapBase: bgTileMapBase, x: (x + scx) % 256, y: (ly + scy) % 256)
-            } else {
-                colorNum = 0
+                pixel = tilePixel(tileMapBase: bgTileMapBase, x: (x + scx) % 256, y: (ly + scy) % 256)
             }
 
-            lineColorNumbers[x] = colorNum
-            displayBuffer[ly * displayBufferWidth + x] = getColor(colorNum: colorNum, paletteAddr: 0xFF47)
+            lineColorNumbers[x] = pixel.colorNumber
+            lineHasPriority[x] = pixel.attributes & 0x80 != 0 // Bit 7 of the tile attributes
+            displayBuffer[ly * displayBufferWidth + x] = isColorMode
+                ? color(colorNum: pixel.colorNumber, palette: Int(pixel.attributes & 0x07), isObject: false)
+                : monochromeColor(colorNum: pixel.colorNumber, paletteAddr: 0xFF47)
         }
 
         if isWindowVisible {
@@ -264,17 +269,24 @@ class GameBoyPPU<AddressBus: AddressBusProtocol> {
         }
     }
 
-    /// Looks up the color number (0-3) of one pixel of a 256x256 tile map.
+    /// Looks up one pixel of a 256x256 tile map.
     ///
     /// A tile map doesn't contain pixels. It is a 32x32 grid of tile numbers, and each tile
     /// number refers to an 8x8 pixel picture stored elsewhere in VRAM (2 bytes per row of pixels).
+    ///
+    /// On a Game Boy Color, VRAM bank 1 holds an attribute byte for every entry of the grid:
+    /// bits 0-2 pick the palette, bit 3 the VRAM bank the picture is in, bits 5 and 6 flip
+    /// it, and bit 7 puts it in front of sprites.
     ///
     /// - Parameters:
     ///   - tileMapBase: The address of the tile map, 0x9800 or 0x9C00.
     ///   - x: The horizontal pixel position in the map.
     ///   - y: The vertical pixel position in the map.
-    private func tileColorNumber(tileMapBase: Int, x: Int, y: Int) -> UInt8 {
-        let tileIndex = addressBus[tileMapBase + (y / 8) * 32 + x / 8] // 32 tiles per row
+    /// - Returns: The pixel's color number (0-3) and its tile's attributes (0 on an original Game Boy).
+    private func tilePixel(tileMapBase: Int, x: Int, y: Int) -> (colorNumber: UInt8, attributes: UInt8) {
+        let mapAddr = tileMapBase + (y / 8) * 32 + x / 8 // 32 tiles per row
+        let tileIndex = addressBus.videoRAM(bank: 0, address: mapAddr)
+        let attributes = addressBus.isColorMode ? addressBus.videoRAM(bank: 1, address: mapAddr) : 0
 
         let tileAddr: Int
         if addressBus[0xFF40] & 0x10 != 0 { // Bit 4 of LCDC: Background & window tile data select
@@ -283,11 +295,14 @@ class GameBoyPPU<AddressBus: AddressBusProtocol> {
             tileAddr = 0x9000 + Int(Int8(bitPattern: tileIndex)) * 16 // Signed tile index around 0x9000
         }
 
-        let data1 = addressBus[tileAddr + (y % 8) * 2] // Tile data for the current line
-        let data2 = addressBus[tileAddr + (y % 8) * 2 + 1]
+        let bank = Int(attributes >> 3) & 1
+        let lineInTile = attributes & 0x40 != 0 ? 7 - y % 8 : y % 8 // Bit 6: vertical flip
+        let data1 = addressBus.videoRAM(bank: bank, address: tileAddr + lineInTile * 2) // Tile data for the current line
+        let data2 = addressBus.videoRAM(bank: bank, address: tileAddr + lineInTile * 2 + 1)
 
-        let colorBit = 7 - (x % 8) // The leftmost pixel is stored in bit 7
-        return ((data2 >> colorBit) & 1) << 1 | ((data1 >> colorBit) & 1)
+        // The leftmost pixel is stored in bit 7. Bit 5 of the attributes: horizontal flip
+        let colorBit = attributes & 0x20 != 0 ? x % 8 : 7 - x % 8
+        return (((data2 >> colorBit) & 1) << 1 | ((data1 >> colorBit) & 1), attributes)
     }
 
     /// Renders the sprites for the given scanline (ly).
@@ -296,9 +311,11 @@ class GameBoyPPU<AddressBus: AddressBusProtocol> {
     private func renderSpritesLine(ly: Int) {
         let lcdc = addressBus[0xFF40] // LCD Control register
         let spriteHeight = (lcdc & 0x04 != 0) ? 16 : 8 // Bit 2 of LCDC: Sprite size (8x16 or 8x8)
+        let isColorMode = addressBus.isColorMode
 
-        // ponytail: no 10-sprites-per-line limit and no X-coordinate priority. Earlier OAM
-        // entries simply win, which is what drawing them last achieves.
+        // ponytail: no 10-sprites-per-line limit, and on an original Game Boy no X-coordinate
+        // priority. Earlier OAM entries simply win, which is what drawing them last achieves
+        // (and is the actual rule on a Game Boy Color).
         for i in (0..<40).reversed() { // Maximum of 40 sprites
             let spriteAddr = 0xFE00 + i * 4 // Each sprite uses 4 bytes in OAM
             let yPos = Int(addressBus[spriteAddr]) - 16 // Y position is always offset by 16, even for 8x8 sprites
@@ -316,8 +333,9 @@ class GameBoyPPU<AddressBus: AddressBusProtocol> {
                 tileIndex &= 0xFE // A tall sprite is two consecutive tiles starting at an even index
             }
             let tileAddr = 0x8000 + tileIndex * 16 // Each tile is 16 bytes
-            let data1 = addressBus[tileAddr + lineInTile * 2] // Tile data for the current line
-            let data2 = addressBus[tileAddr + lineInTile * 2 + 1]
+            let bank = isColorMode ? Int(attributes >> 3) & 1 : 0 // Bit 3 of attributes: VRAM bank (Color only)
+            let data1 = addressBus.videoRAM(bank: bank, address: tileAddr + lineInTile * 2) // Tile data for the current line
+            let data2 = addressBus.videoRAM(bank: bank, address: tileAddr + lineInTile * 2 + 1)
 
             for x in 0..<8 {
                 // Bit 5 of attributes: Horizontal flip
@@ -329,14 +347,21 @@ class GameBoyPPU<AddressBus: AddressBusProtocol> {
                     continue // Color number 0 is transparent
                 }
 
-                // Bit 7 of attributes: the sprite hides behind background colors 1-3
-                if attributes & 0x80 != 0 && lineColorNumbers[xPixel] != 0 {
+                // A sprite hides behind background colors 1-3 when it asks to (bit 7 of its
+                // attributes) or, on a Game Boy Color, when the background tile asks to be in
+                // front. Clearing bit 0 of LCDC on a Color puts sprites on top regardless.
+                let isBehindBackground = isColorMode
+                    ? lcdc & 0x01 != 0 && (attributes & 0x80 != 0 || lineHasPriority[xPixel])
+                    : attributes & 0x80 != 0
+                if isBehindBackground && lineColorNumbers[xPixel] != 0 {
                     continue
                 }
 
-                // Bit 4 of attributes: Palette number
-                let paletteAddr = attributes & 0x10 != 0 ? 0xFF49 : 0xFF48
-                displayBuffer[ly * displayBufferWidth + xPixel] = getColor(colorNum: colorNum, paletteAddr: paletteAddr)
+                displayBuffer[ly * displayBufferWidth + xPixel] = isColorMode
+                    // Bits 0-2 of attributes: Color palette number
+                    ? color(colorNum: colorNum, palette: Int(attributes & 0x07), isObject: true)
+                    // Bit 4 of attributes: Monochrome palette number
+                    : monochromeColor(colorNum: colorNum, paletteAddr: attributes & 0x10 != 0 ? 0xFF49 : 0xFF48)
             }
         }
     }

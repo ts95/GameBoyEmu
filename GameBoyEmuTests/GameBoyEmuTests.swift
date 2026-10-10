@@ -3,12 +3,13 @@ import Testing
 @testable import GameBoyEmu
 
 /// A Game Boy with a blank 32KB cartridge that has `program` at the entry point (0x0100).
-private func makeGameBoy(program: [UInt8] = []) throws -> GameBoy {
+private func makeGameBoy(program: [UInt8] = [], isColor: Bool = false) throws -> GameBoy {
     var rom = [UInt8](repeating: 0, count: 0x8000)
+    rom[0x143] = isColor ? 0x80 : 0x00 // The header's "made for Game Boy Color" flag
     rom.replaceSubrange(0x100..<(0x100 + program.count), with: program)
 
     let gameBoy = GameBoy()
-    try gameBoy.memory.loadCartridge(data: Data(rom))
+    try gameBoy.loadCartridge(data: Data(rom))
     return gameBoy
 }
 
@@ -230,9 +231,9 @@ private func makeGameBoy(program: [UInt8] = []) throws -> GameBoy {
 
     try gameBoy.runFrame()
 
-    #expect(gameBoy.ppu.displayBuffer[0] == 2)
-    #expect(gameBoy.ppu.displayBuffer[1] == 1)
-    #expect(gameBoy.ppu.displayBuffer[2] == 3) // Color number 0
+    #expect(gameBoy.ppu.displayBuffer[0] == monochromeColors[2])
+    #expect(gameBoy.ppu.displayBuffer[1] == monochromeColors[1])
+    #expect(gameBoy.ppu.displayBuffer[2] == monochromeColors[3]) // Color number 0
 }
 
 @Test func ppuDrawsSprites() throws {
@@ -249,10 +250,10 @@ private func makeGameBoy(program: [UInt8] = []) throws -> GameBoy {
 
     try gameBoy.runFrame()
 
-    #expect(gameBoy.ppu.displayBuffer[2 * 160 + 4] == 0)
-    #expect(gameBoy.ppu.displayBuffer[9 * 160 + 4] == 3)
-    #expect(gameBoy.ppu.displayBuffer[9 * 160 + 11] == 3)
-    #expect(gameBoy.ppu.displayBuffer[9 * 160 + 12] == 0)
+    #expect(gameBoy.ppu.displayBuffer[2 * 160 + 4] == monochromeColors[0])
+    #expect(gameBoy.ppu.displayBuffer[9 * 160 + 4] == monochromeColors[3])
+    #expect(gameBoy.ppu.displayBuffer[9 * 160 + 11] == monochromeColors[3])
+    #expect(gameBoy.ppu.displayBuffer[9 * 160 + 12] == monochromeColors[0])
 }
 
 // MARK: - APU
@@ -352,6 +353,132 @@ private func run(_ apu: GameBoyAPU, seconds: Double) {
     #expect(apu[0xFF17] == 0x00)
 }
 
+// MARK: - Game Boy Color
+
+@Test func cartridgeHeaderDecidesWhetherTheMachineRunsInColor() throws {
+    let original = try makeGameBoy()
+    #expect(!original.memory.isColorMode)
+    #expect(original.cpu.a == 0x01)
+
+    let color = try makeGameBoy(isColor: true)
+    #expect(color.memory.isColorMode)
+    #expect(color.cpu.a == 0x11) // How a game recognizes a Game Boy Color
+}
+
+@Test func colorGamesCanSwitchWorkAndVideoRAMBanks() throws {
+    let memory = try makeGameBoy(isColor: true).memory
+
+    memory[0xD000] = 0x11 // Bank 1 is selected at power-on
+    memory[0xFF70] = 3
+    memory[0xD000] = 0x33
+    memory[0xC000] = 0xCC // Bank 0 is not switchable
+    #expect(memory[0xD000] == 0x33)
+    #expect(memory[0xF000] == 0x33) // Echo RAM follows the selected bank
+    memory[0xFF70] = 0 // Bank 0 can't be selected here, it becomes bank 1
+    #expect(memory[0xD000] == 0x11)
+    #expect(memory[0xC000] == 0xCC)
+
+    memory[0x8000] = 0xAA
+    memory[0xFF4F] = 1
+    memory[0x8000] = 0xBB
+    #expect(memory[0x8000] == 0xBB)
+    #expect(memory.videoRAM(bank: 0, address: 0x8000) == 0xAA)
+    #expect(memory.videoRAM(bank: 1, address: 0x8000) == 0xBB)
+}
+
+@Test func bankRegistersDoNothingOnAnOriginalGameBoy() throws {
+    let memory = try makeGameBoy().memory
+
+    memory[0xD000] = 0x11
+    memory[0xFF70] = 3
+    #expect(memory[0xD000] == 0x11)
+
+    memory[0x8000] = 0xAA
+    memory[0xFF4F] = 1
+    #expect(memory[0x8000] == 0xAA)
+}
+
+@Test func colorPalettesAreWrittenThroughAnIndexAndADataRegister() throws {
+    let memory = try makeGameBoy(isColor: true).memory
+
+    memory[0xFF68] = 0x80 | 2 // Start at byte 2 (color 1 of palette 0) and move on after each write
+    memory[0xFF69] = 0x1F     // Low byte: red at full strength
+    memory[0xFF69] = 0x7C     // High byte: blue at full strength
+
+    #expect(memory.colorPaletteEntry(isObject: false, index: 1) == 0x7C1F)
+    #expect(memory[0xFF68] & 0x3F == 4) // The index moved on by itself
+}
+
+@Test func ppuDrawsBackgroundTilesInColor() throws {
+    let gameBoy = try makeGameBoy(isColor: true)
+    let memory = gameBoy.memory
+    memory[0xFF40] = 0x91 // LCD on, tile data at 0x8000, background on
+
+    // Palette 3, color 1: pure green (bits 5-9)
+    memory[0xFF68] = 0x80 | (3 * 4 + 1) * 2
+    memory[0xFF69] = 0xE0
+    memory[0xFF69] = 0x03
+
+    memory[0x9800] = 1           // Top-left tile of the map is tile 1...
+    memory[0xFF4F] = 1
+    memory[0x9800] = 0x08 | 0x03 // ...taken from VRAM bank 1, drawn with palette 3
+    memory[0x8010] = 0b1000_0000 // Tile 1 in bank 1, first row: only the leftmost pixel has color number 1
+    memory[0xFF4F] = 0
+
+    try gameBoy.runFrame()
+
+    // Pixels are stored as red, green, blue, unused; so green is the second-lowest byte
+    #expect(gameBoy.ppu.displayBuffer[0] == 0xFF00_FF00)
+    #expect(gameBoy.ppu.displayBuffer[1] == 0xFFFF_FFFF) // Color 0 of an unset palette is white
+}
+
+@Test func backgroundTilesCanClaimPriorityOverSpritesInColor() throws {
+    let gameBoy = try makeGameBoy(isColor: true)
+    let memory = gameBoy.memory
+    memory[0xFF40] = 0x93 // LCD on, background on, sprites on
+
+    memory[0xFF68] = 0x80 | 2 // Background palette 0, color 1: black
+    memory[0xFF69] = 0x00
+    memory[0xFF69] = 0x00
+    memory[0xFF6A] = 0x80 | 2 // Sprite palette 0, color 1: red
+    memory[0xFF6B] = 0x1F
+    memory[0xFF6B] = 0x00
+
+    memory[0x8010] = 0xFF // Tile 1, first row: all pixels have color number 1
+    memory[0x9800] = 1    // Background: tile 1 in the top-left corner...
+    memory[0xFF4F] = 1
+    memory[0x9800] = 0x80 // ...with priority over sprites
+    memory[0xFF4F] = 0
+
+    memory[0xFE00] = 16 // Sprite 0 on top of it, also showing tile 1
+    memory[0xFE01] = 8
+    memory[0xFE02] = 1
+
+    try gameBoy.runFrame()
+    #expect(gameBoy.ppu.displayBuffer[0] == 0xFF00_0000) // The background wins
+
+    memory[0xFF40] = 0x92 // Clearing bit 0 of LCDC puts sprites on top regardless
+    try gameBoy.runFrame()
+    #expect(gameBoy.ppu.displayBuffer[0] == 0xFF00_00FF)
+}
+
+@Test func mbc5SelectsROMBanksWithANineBitNumber() throws {
+    var rom = [UInt8](repeating: 0, count: 0x101 * 0x4000)
+    rom[0x147] = 0x19 // MBC5
+    rom[0x4010] = 1
+    rom[0x100 * 0x4000 + 0x10] = 0xAB
+
+    let memory = GameBoyMemory()
+    try memory.loadCartridge(data: Data(rom))
+
+    memory[0x2000] = 0x00
+    memory[0x3000] = 0x01 // Bank 0x100
+    #expect(memory[0x4010] == 0xAB)
+
+    memory[0x3000] = 0x00 // Bank 0 is a valid choice on MBC5
+    #expect(memory[0x4010] == rom[0x10])
+}
+
 // MARK: - Emulator
 
 @Test func emulatorDeliversFramesUntilItsConsumerStops() async throws {
@@ -389,8 +516,8 @@ private func run(_ apu: GameBoyAPU, seconds: Double) {
     }
 
     var rom = [UInt8](repeating: 0, count: 0x8000)
-    rom[0x147] = 0x19 // MBC5
-    #expect(throws: GameBoyError.unsupportedCartridge(type: 0x19)) {
+    rom[0x147] = 0x22 // MBC7
+    #expect(throws: GameBoyError.unsupportedCartridge(type: 0x22)) {
         try memory.loadCartridge(data: Data(rom))
     }
 }

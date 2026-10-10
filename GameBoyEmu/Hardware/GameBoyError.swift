@@ -62,7 +62,7 @@ enum GameBoyError: LocalizedError, Equatable, Sendable {
         case .invalidROM:
             "The file is too small to contain a game. It may be damaged or incomplete."
         case .unsupportedCartridge(let type):
-            "It uses memory bank controller type 0x\(Self.hex(type)). Only games without one, or with MBC1 or MBC3, can be played."
+            "It uses memory bank controller type 0x\(Self.hex(type)). Only games without one, or with MBC1, MBC3 or MBC5, can be played."
         case .invalidInstruction(let opcode, let address):
             "It tried to run an instruction that doesn't exist (0x\(Self.hex(opcode)) at address 0x\(Self.hex(address))). This is usually a bug in the emulator, or a damaged ROM."
         case .saveNotReadable(let reason):

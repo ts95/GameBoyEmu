@@ -44,8 +44,18 @@ private let SOUND_REGISTERS_START: Int = 0xFF10
 private let SOUND_REGISTERS_END: Int = 0xFF3F
 private let DMA_REGISTER: Int = 0xFF46
 
+private let VRAM_BANK_REGISTER: Int = 0xFF4F
+private let HDMA_CONTROL_REGISTER: Int = 0xFF55
+private let BACKGROUND_PALETTE_INDEX_REGISTER: Int = 0xFF68
+private let BACKGROUND_PALETTE_DATA_REGISTER: Int = 0xFF69
+private let OBJECT_PALETTE_INDEX_REGISTER: Int = 0xFF6A
+private let OBJECT_PALETTE_DATA_REGISTER: Int = 0xFF6B
+private let WRAM_BANK_REGISTER: Int = 0xFF70
+
 private let BANK_SIZE = 0x4000
 private let RAM_BANK_SIZE = 0x2000
+private let VRAM_BANK_SIZE = 0x2000
+private let WRAM_BANK_SIZE = 0x1000
 
 enum BankingMode: UInt8 {
     case rom = 0
@@ -63,11 +73,14 @@ class GameBoyMemory: AddressBusProtocol {
     // MARK: - CPU memory
 
     // External RAM: Optional RAM on the cartridge, often battery-backed for saving games.
-    // Sized for the largest supported configuration, 4 banks of 8KB.
+    // At least 4 banks of 8KB; resized when a cartridge that has more is loaded.
     var externalRam: Array<UInt8>
 
-    // Work RAM: General-purpose RAM used by the CPU for various tasks.
+    // Work RAM: General-purpose RAM used by the CPU for various tasks. 8 banks of 4KB:
+    // bank 0 is always at 0xC000, and 0xD000 shows bank 1 or, on a Game Boy Color,
+    // whichever of banks 1-7 the game has selected.
     var wram: Array<UInt8>
+    var wramBank = 1
 
     // I/O Ports: Used for input/output operations and hardware control registers.
     var ioPorts: Array<UInt8>
@@ -80,8 +93,20 @@ class GameBoyMemory: AddressBusProtocol {
 
     // MARK: - PPU memory
 
-    // Video RAM: Used by the PPU for tile data and attributes.
+    // Video RAM: Used by the PPU for tile data and attributes. A Game Boy Color has two
+    // banks of it: bank 1 holds more tiles, plus one attribute byte per background tile.
     var vram: Array<UInt8>
+    var vramBank = 0
+
+    /// Whether the machine runs as a Game Boy Color, which the cartridge header decides.
+    /// An original Game Boy game runs exactly as it does on the original hardware.
+    private(set) var isColorMode = false
+
+    // Color palettes: 8 for the background and 8 for sprites, each with 4 colors of 2 bytes.
+    // They aren't in the address space; the game writes them one byte at a time through an
+    // index register and a data register.
+    var backgroundPalettes = [UInt8](repeating: 0xFF, count: 64)
+    var objectPalettes = [UInt8](repeating: 0xFF, count: 64)
 
     // Object Attribute Memory: Used by the PPU for sprite attributes.
     var oam: Array<UInt8>
@@ -107,7 +132,8 @@ class GameBoyMemory: AddressBusProtocol {
     var cartridgeData: [UInt8] = []
 
     // Bank registers
-    var bank1: UInt8 = 1 // ROM bank number (5 bits on MBC1, 7 bits on MBC3)
+    var bank1: UInt8 = 1 // ROM bank number (5 bits on MBC1, 7 bits on MBC3, low 8 bits on MBC5)
+    var bank1High: UInt8 = 0 // Bit 8 of the ROM bank number (MBC5 only)
     var bank2: UInt8 = 0 // RAM bank number, or the upper ROM bank bits on MBC1
     var mode: BankingMode = .rom // Mode register (MBC1 only)
 
@@ -130,25 +156,43 @@ class GameBoyMemory: AddressBusProtocol {
         (0x0F...0x13).contains(cartridgeType)
     }
 
+    private var isMBC5: Bool {
+        (0x19...0x1E).contains(cartridgeType)
+    }
+
     private var romBankOffset: Int {
-        let bank = isMBC3 ? Int(bank1) : Int(bank1) | (Int(bank2) << 5)
+        let bank: Int
+        if isMBC5 {
+            bank = Int(bank1) | (Int(bank1High) << 8)
+        } else if isMBC3 {
+            bank = Int(bank1)
+        } else {
+            bank = Int(bank1) | (Int(bank2) << 5)
+        }
         let bankCount = max(cartridgeData.count / BANK_SIZE, 2)
         return (bank % bankCount) * BANK_SIZE
     }
 
-    private var ramBankOffset: Int {
-        let bank = isMBC3 || mode == .ram ? Int(bank2 & 0x03) : 0
-        return bank * RAM_BANK_SIZE
+    private func externalRamIndex(_ address: Int) -> Int {
+        let bank = isMBC5 || isMBC3 || mode == .ram ? Int(bank2) : 0
+        return (bank * RAM_BANK_SIZE + address - EXTERNAL_RAM_START) % externalRam.count
+    }
+
+    /// 0xC000-0xCFFF is always bank 0 and 0xD000-0xDFFF the selected bank. Echo RAM
+    /// (0xE000-0xFDFF) mirrors the same memory, which masking the address takes care of.
+    private func wramIndex(_ address: Int) -> Int {
+        let offset = address & 0x1FFF
+        return offset < WRAM_BANK_SIZE ? offset : wramBank * WRAM_BANK_SIZE + offset - WRAM_BANK_SIZE
     }
 
     // MARK: - Initializer
 
     init() {
         externalRam = Array(repeating: 0, count: 4 * RAM_BANK_SIZE)
-        wram = Array(repeating: 0, count: WRAM_END - WRAM_START + 1)
+        wram = Array(repeating: 0, count: 8 * WRAM_BANK_SIZE)
         ioPorts = Array(repeating: 0, count: IO_PORTS_END - IO_PORTS_START + 1)
         hram = Array(repeating: 0, count: HRAM_END - HRAM_START + 1)
-        vram = Array(repeating: 0, count: VRAM_END - VRAM_START + 1)
+        vram = Array(repeating: 0, count: 2 * VRAM_BANK_SIZE)
         oam = Array(repeating: 0, count: OAM_END - OAM_START + 1)
 
         initializeHardware()
@@ -164,15 +208,13 @@ class GameBoyMemory: AddressBusProtocol {
                 let index = romBankOffset + address - ROM_BANK_1_START
                 return index < cartridgeData.count ? cartridgeData[index] : 0xFF
             case VRAM_START...VRAM_END:
-                return vram[address - VRAM_START]
+                return vram[vramBank * VRAM_BANK_SIZE + address - VRAM_START]
             case EXTERNAL_RAM_START...EXTERNAL_RAM_END:
-                // ponytail: MBC3 real-time clock registers (bank2 >= 8) read as RAM bank 0-3.
+                // ponytail: MBC3 real-time clock registers (bank2 >= 8) read as ordinary RAM.
                 // Add an RTC if a game's in-game clock matters.
-                return externalRam[ramBankOffset + address - EXTERNAL_RAM_START]
-            case WRAM_START...WRAM_END:
-                return wram[address - WRAM_START]
-            case ECHO_RAM_START...ECHO_RAM_END:
-                return wram[address - ECHO_RAM_START]
+                return externalRam[externalRamIndex(address)]
+            case WRAM_START...ECHO_RAM_END:
+                return wram[wramIndex(address)]
             case OAM_START...OAM_END:
                 return oam[address - OAM_START]
             case JOYPAD_REGISTER:
@@ -183,6 +225,16 @@ class GameBoyMemory: AddressBusProtocol {
                 return ioPorts[address - IO_PORTS_START] | 0xE0 // The unused upper bits read as 1
             case SOUND_REGISTERS_START...SOUND_REGISTERS_END:
                 return apu[address]
+            case VRAM_BANK_REGISTER where isColorMode:
+                return UInt8(vramBank) | 0xFE
+            case WRAM_BANK_REGISTER where isColorMode:
+                return UInt8(wramBank) | 0xF8
+            case HDMA_CONTROL_REGISTER where isColorMode:
+                return 0xFF // No transfer in progress
+            case BACKGROUND_PALETTE_DATA_REGISTER where isColorMode:
+                return backgroundPalettes[Int(ioPorts[BACKGROUND_PALETTE_INDEX_REGISTER - IO_PORTS_START] & 0x3F)]
+            case OBJECT_PALETTE_DATA_REGISTER where isColorMode:
+                return objectPalettes[Int(ioPorts[OBJECT_PALETTE_INDEX_REGISTER - IO_PORTS_START] & 0x3F)]
             case IO_PORTS_START...IO_PORTS_END:
                 return ioPorts[address - IO_PORTS_START]
             case HRAM_START...HRAM_END:
@@ -199,9 +251,9 @@ class GameBoyMemory: AddressBusProtocol {
             // The cartridge is read-only memory. Writing to its address range doesn't change
             // the ROM, it sends a command to the bank controller chip on the cartridge.
             case MBC_ROM_BANK_NUMBER_START...MBC_ROM_BANK_NUMBER_END:
-                writeBank1(value: newValue)
+                writeBank1(address: address, value: newValue)
             case MBC_RAM_BANK_NUMBER_START...MBC_RAM_BANK_NUMBER_END:
-                bank2 = isMBC3 ? newValue & 0x0F : newValue & 0x03
+                bank2 = isMBC3 || isMBC5 ? newValue & 0x0F : newValue & 0x03
             case MBC_BANKING_MODE_START...MBC_BANKING_MODE_END:
                 mode = BankingMode(rawValue: newValue & 0x01)!
             case ROM_BANK_0_START...ROM_BANK_1_END:
@@ -209,14 +261,12 @@ class GameBoyMemory: AddressBusProtocol {
                 // enabled here; honor it if a game depends on RAM being locked.
                 break
             case VRAM_START...VRAM_END:
-                vram[address - VRAM_START] = newValue
+                vram[vramBank * VRAM_BANK_SIZE + address - VRAM_START] = newValue
             case EXTERNAL_RAM_START...EXTERNAL_RAM_END:
-                externalRam[ramBankOffset + address - EXTERNAL_RAM_START] = newValue
+                externalRam[externalRamIndex(address)] = newValue
                 hasUnsavedExternalRam = true
-            case WRAM_START...WRAM_END:
-                wram[address - WRAM_START] = newValue
-            case ECHO_RAM_START...ECHO_RAM_END:
-                wram[address - ECHO_RAM_START] = newValue
+            case WRAM_START...ECHO_RAM_END:
+                wram[wramIndex(address)] = newValue
             case OAM_START...OAM_END:
                 oam[address - OAM_START] = newValue
             case JOYPAD_REGISTER:
@@ -241,6 +291,16 @@ class GameBoyMemory: AddressBusProtocol {
                 for offset in 0..<oam.count {
                     oam[offset] = self[source + offset]
                 }
+            case VRAM_BANK_REGISTER where isColorMode:
+                vramBank = Int(newValue & 0x01)
+            case WRAM_BANK_REGISTER where isColorMode:
+                wramBank = max(Int(newValue & 0x07), 1) // Selecting bank 0 gives bank 1
+            case BACKGROUND_PALETTE_DATA_REGISTER where isColorMode:
+                writePaletteData(newValue, to: &backgroundPalettes, indexRegister: BACKGROUND_PALETTE_INDEX_REGISTER)
+            case OBJECT_PALETTE_DATA_REGISTER where isColorMode:
+                writePaletteData(newValue, to: &objectPalettes, indexRegister: OBJECT_PALETTE_INDEX_REGISTER)
+            case HDMA_CONTROL_REGISTER where isColorMode:
+                transferToVideoRAM(control: newValue)
             case IO_PORTS_START...IO_PORTS_END:
                 ioPorts[address - IO_PORTS_START] = newValue
             case HRAM_START...HRAM_END:
@@ -265,14 +325,26 @@ class GameBoyMemory: AddressBusProtocol {
         guard data.count >= 0x150 else {
             throw GameBoyError.invalidROM
         }
-        // No bank controller, MBC1 or MBC3. Anything else would run with the wrong banking
-        // and crash in confusing ways, so it is refused up front.
+        // No bank controller, MBC1, MBC3 or MBC5. Anything else would run with the wrong
+        // banking and crash in confusing ways, so it is refused up front.
         let type = data[data.startIndex + 0x147]
-        guard [0x00, 0x08, 0x09].contains(type) || (0x01...0x03).contains(type) || (0x0F...0x13).contains(type) else {
+        guard [0x00, 0x08, 0x09].contains(type) || (0x01...0x03).contains(type)
+                || (0x0F...0x13).contains(type) || (0x19...0x1E).contains(type) else {
             throw GameBoyError.unsupportedCartridge(type: type)
         }
 
         cartridgeData = [UInt8](data)
+
+        // Bit 7 of this header byte marks a game made for the Game Boy Color
+        isColorMode = cartridgeData[0x143] & 0x80 != 0
+        vramBank = 0
+        wramBank = 1
+        bank1High = 0
+
+        // The header gives the size of the cartridge RAM; only the largest kind needs
+        // more than the default 4 banks
+        let ramBankCount = cartridgeData[0x149] == 0x04 ? 16 : cartridgeData[0x149] == 0x05 ? 8 : 4
+        externalRam = Array(repeating: 0, count: ramBankCount * RAM_BANK_SIZE)
         if let save {
             externalRam.replaceSubrange(0..<min(save.count, externalRam.count), with: save.prefix(externalRam.count))
         }
@@ -338,17 +410,72 @@ class GameBoyMemory: AddressBusProtocol {
 
     // MARK: - Bank Switching
 
-    private func writeBank1(value: UInt8) {
+    /// Handles a write to one of the color palette data registers. The index register picks
+    /// which of the 64 bytes is written, and can be set to move on to the next one by itself.
+    private func writePaletteData(_ value: UInt8, to palettes: inout [UInt8], indexRegister: Int) {
+        let index = ioPorts[indexRegister - IO_PORTS_START]
+        palettes[Int(index & 0x3F)] = value
+        if index & 0x80 != 0 {
+            ioPorts[indexRegister - IO_PORTS_START] = 0x80 | ((index &+ 1) & 0x3F)
+        }
+    }
+
+    /// HDMA: copies up to 2KB from ROM or RAM into video RAM. The source and destination
+    /// addresses come from the four registers before the control register.
+    ///
+    /// ponytail: the "one block per HBlank" mode is done all at once, like the general-purpose
+    /// mode. Spread it over the scanlines if a game's mid-frame effects depend on the timing.
+    private func transferToVideoRAM(control: UInt8) {
+        let source = (Int(ioPorts[0x51]) << 8 | Int(ioPorts[0x52])) & 0xFFF0
+        let destination = VRAM_START + ((Int(ioPorts[0x53]) << 8 | Int(ioPorts[0x54])) & 0x1FF0)
+        let length = (Int(control & 0x7F) + 1) * 16
+
+        for offset in 0..<length where destination + offset <= VRAM_END {
+            self[destination + offset] = self[source + offset]
+        }
+    }
+
+    private func writeBank1(address: Int, value: UInt8) {
         guard cartridgeType != 0 else {
             return // A plain 32KB cartridge has no bank controller
+        }
+        if isMBC5 {
+            // MBC5 has a 9-bit bank number split over two registers, and bank 0 is allowed
+            if address < 0x3000 {
+                bank1 = value
+            } else {
+                bank1High = value & 0x01
+            }
+            return
         }
         bank1 = value & (isMBC3 ? 0x7F : 0x1F)
         if bank1 == 0 {
             bank1 = 1
         }
     }
+
+    // MARK: - PPU access
+
+    func videoRAM(bank: Int, address: Int) -> UInt8 {
+        vram[bank * VRAM_BANK_SIZE + address - VRAM_START]
+    }
+
+    func colorPaletteEntry(isObject: Bool, index: Int) -> UInt16 {
+        let palettes = isObject ? objectPalettes : backgroundPalettes
+        return UInt16(palettes[index * 2]) | UInt16(palettes[index * 2 + 1]) << 8
+    }
 }
 
 protocol AddressBusProtocol {
     subscript(address: Int) -> UInt8 { get set }
+
+    /// Whether the machine runs as a Game Boy Color.
+    var isColorMode: Bool { get }
+
+    /// Reads video RAM (0x8000-0x9FFF) from a specific bank. The PPU sees both banks at
+    /// all times, whichever one the game currently has selected for itself.
+    func videoRAM(bank: Int, address: Int) -> UInt8
+
+    /// One of the 32 background or 32 sprite colors, as 15-bit RGB with red in the low bits.
+    func colorPaletteEntry(isObject: Bool, index: Int) -> UInt16
 }

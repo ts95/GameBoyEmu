@@ -28,6 +28,22 @@ final class GameBoy {
         self.ppu = GameBoyPPU(addressBus: memory)
     }
 
+    /// Inserts a cartridge and puts the CPU in the state the boot ROM would leave it in.
+    ///
+    /// - Parameters:
+    ///   - data: The cartridge ROM.
+    ///   - save: The contents of the cartridge RAM from an earlier session, if any.
+    /// - Throws: `GameBoyError` if the data isn't a ROM this emulator can run.
+    func loadCartridge(data: Data, save: Data? = nil) throws {
+        try memory.loadCartridge(data: data, save: save)
+
+        if memory.isColorMode {
+            // A game finds out it is running on a Game Boy Color by looking at register A
+            (cpu.a, cpu.f) = (0x11, 0x80)
+            (cpu.bc, cpu.de, cpu.hl) = (0x0000, 0xFF56, 0x000D)
+        }
+    }
+
     /// Runs one CPU instruction and lets the rest of the hardware catch up by the same
     /// number of cycles. This is the heartbeat of the emulator: the CPU, PPU, timer and APU
     /// are independent machines that only stay in sync because they count the same cycles.

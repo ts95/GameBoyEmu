@@ -35,21 +35,19 @@ struct GameBoyView: View {
             }
     }
 
-    /// The current frame as a 160x144 grayscale image, scaled up without smoothing.
+    /// The current frame as a 160x144 image, scaled up without smoothing.
     @ViewBuilder
     var canvas: some View {
-        // Color 0 is the lightest shade and 3 the darkest
-        let shades: [UInt8] = [0xE6, 0xB3, 0x4D, 0x00]
-        let pixels = Data(model.frame.map { shades[Int($0)] })
+        let pixels = model.frame.withUnsafeBufferPointer { Data(buffer: $0) }
 
         if let provider = CGDataProvider(data: pixels as CFData),
            let image = CGImage(width: displayBufferWidth,
                                height: displayBufferHeight,
                                bitsPerComponent: 8,
-                               bitsPerPixel: 8,
-                               bytesPerRow: displayBufferWidth,
-                               space: CGColorSpaceCreateDeviceGray(),
-                               bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.none.rawValue),
+                               bitsPerPixel: 32,
+                               bytesPerRow: displayBufferWidth * 4,
+                               space: CGColorSpaceCreateDeviceRGB(),
+                               bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.noneSkipLast.rawValue),
                                provider: provider,
                                decode: nil,
                                shouldInterpolate: false,

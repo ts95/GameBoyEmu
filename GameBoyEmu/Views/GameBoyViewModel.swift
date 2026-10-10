@@ -13,8 +13,8 @@ import Observation
 @MainActor
 @Observable
 final class GameBoyViewModel {
-    /// The last completed frame, one color (0-3) per pixel.
-    private(set) var frame: [UInt8] = Array(repeating: 0, count: displayBufferWidth * displayBufferHeight)
+    /// The last completed frame, one pixel (red, green, blue and an unused byte) per element.
+    private(set) var frame: [UInt32] = Array(repeating: monochromeColors[0], count: displayBufferWidth * displayBufferHeight)
 
     /// Which buttons are held down. Changes are forwarded to the emulator.
     var joypad = JoypadState() {
