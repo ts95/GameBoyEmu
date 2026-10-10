@@ -18,6 +18,9 @@ struct GameBoyView: View {
     @FocusState private var isFocused: Bool
     @GestureState private var dPadState = DPadState.idle
 
+    /// Compact when there is little height to work with, as on a phone held sideways.
+    @Environment(\.verticalSizeClass) private var verticalSizeClass
+
     let dPadSize: CGFloat = 150
 
     let gameBoyBeige = Color(red: 182/255, green: 183/255, blue: 178/255)
@@ -83,8 +86,39 @@ struct GameBoyView: View {
 
             optionButtons
         }
-        .fontDesign(.monospaced)
-        .textCase(.uppercase)
+    }
+
+    /// The upright console: the screen on top and the controls below it.
+    var portraitLayout: some View {
+        VStack {
+            screen
+            muteButton
+                .frame(maxWidth: .infinity, alignment: .trailing)
+            Spacer()
+            joypad
+            Spacer()
+        }
+    }
+
+    /// The console on its side: the screen in the middle, taking the full height, with the
+    /// d-pad to its left and the buttons to its right. Stacking them, as in portrait, would
+    /// leave no room for the screen.
+    var landscapeLayout: some View {
+        HStack(spacing: 24) {
+            dPad
+
+            screen
+
+            VStack(spacing: 16) {
+                muteButton
+                    .frame(maxWidth: .infinity, alignment: .trailing)
+                Spacer()
+                actionButtons
+                Spacer()
+                optionButtons
+            }
+            .frame(width: 190)
+        }
     }
 
     var dPad: some View {
@@ -199,15 +233,17 @@ struct GameBoyView: View {
     }
 
     var body: some View {
-        VStack {
-            screen
-            muteButton
-                .frame(maxWidth: .infinity, alignment: .trailing)
-            Spacer()
-            joypad
-            Spacer()
+        Group {
+            if verticalSizeClass == .compact {
+                landscapeLayout
+            } else {
+                portraitLayout
+            }
         }
+        .fontDesign(.monospaced)
+        .textCase(.uppercase)
         .padding()
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(gameBoyBeige.opacity(0.2))
         // Keyboard: WASD = d-pad, J = A, K = B, Z = Select, X = Start
         .focusable()
