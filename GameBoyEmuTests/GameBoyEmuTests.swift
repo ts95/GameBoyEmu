@@ -557,6 +557,36 @@ private func run(_ apu: GameBoyAPU, seconds: Double) {
     #expect(gameBoy.ppu.displayBuffer[1] == displayPixel(from: 0x0000))
 }
 
+// MARK: - Joypad
+
+@Test func aQuickTapIsHeldLongEnoughForTheGameToSeeIt() throws {
+    var down = JoypadState()
+    down.dPadState = .down
+
+    var queue = JoypadQueue()
+    #expect(queue.advanceFrame() == JoypadState()) // Nothing pressed yet
+
+    // A tap: pressed and released again before the next frame
+    queue.report(down)
+    queue.report(JoypadState())
+
+    for _ in 0..<JoypadQueue.minimumFrames {
+        #expect(queue.advanceFrame() == down)
+    }
+    #expect(queue.advanceFrame() == JoypadState())
+}
+
+@Test func aPressAfterAPauseTakesEffectOnTheNextFrame() throws {
+    var a = JoypadState()
+    a.aButtonPressed = true
+
+    var queue = JoypadQueue()
+    for _ in 0..<10 { _ = queue.advanceFrame() }
+
+    queue.report(a)
+    #expect(queue.advanceFrame() == a)
+}
+
 // MARK: - Catalogue
 
 @Test func catalogueNamesWellKnownGamesFromTheirHeaderTitles() throws {

@@ -16,12 +16,13 @@ import Foundation
 /// - button presses go in through `setJoypad(_:)`
 actor Emulator {
     private let gameBoy = GameBoy()
+    private var joypadQueue = JoypadQueue()
     private var isMuted = false
 
-    /// Updates which buttons are held down. Takes effect at the next frame boundary, when
-    /// the emulation loop is suspended and the actor is free to run this.
+    /// Updates which buttons are held down. Takes effect at a frame boundary, when the
+    /// emulation loop is suspended and the actor is free to run this.
     func setJoypad(_ state: JoypadState) {
-        gameBoy.memory.joypad = state
+        joypadQueue.report(state)
     }
 
     /// Mutes or unmutes the sound. Muting shuts the audio engine down altogether, and
@@ -83,6 +84,7 @@ actor Emulator {
         // Emulate a whole frame as fast as possible, then sleep until it is due. Sleeping
         // after every instruction can't work: a sleep takes far longer than the ~1µs asked for.
         while !Task.isCancelled {
+            gameBoy.memory.joypad = joypadQueue.advanceFrame()
             try gameBoy.runFrame()
             frames.yield(gameBoy.ppu.displayBuffer)
 
@@ -156,5 +158,36 @@ actor Emulator {
         // Atomic, so a crash mid-write can't leave a half-written save behind
         try Data(gameBoy.memory.externalRam).write(to: url, options: .atomic)
         gameBoy.memory.hasUnsavedExternalRam = false
+    }
+}
+
+/// Makes sure every button press lasts long enough for a game to notice it.
+///
+/// A game only looks at the buttons once per frame, and some only every few frames. A real
+/// button takes a while to press and release, but a tap on a touch screen can be over within
+/// a frame or two and be missed entirely. So each state the UI reports is shown to the game
+/// for a minimum number of frames before the next one replaces it.
+struct JoypadQueue {
+    /// About 67 ms. Pokémon Crystal's menus miss presses shorter than 3 frames.
+    static let minimumFrames = 4
+
+    /// The state the game currently sees.
+    private(set) var current = JoypadState()
+    private var pending: [JoypadState] = []
+    private var framesShown = JoypadQueue.minimumFrames
+
+    /// Records a new state from the UI, to be shown once the ones before it have had their turn.
+    mutating func report(_ state: JoypadState) {
+        pending.append(state)
+    }
+
+    /// Called once per frame. Returns the state the game should see during that frame.
+    mutating func advanceFrame() -> JoypadState {
+        if framesShown >= JoypadQueue.minimumFrames, !pending.isEmpty {
+            current = pending.removeFirst()
+            framesShown = 0
+        }
+        framesShown += 1
+        return current
     }
 }
