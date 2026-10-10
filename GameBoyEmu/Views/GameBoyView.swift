@@ -158,7 +158,7 @@ struct GameBoyView: View {
     func actionButton(_ title: String, onPressChange: @escaping (Bool) -> Void) -> some View {
         Button(action: {}, label: {
             Circle()
-                .fill(.pink)
+                .fill(Color.accentColor)
                 .frame(width: 70, height: 70)
                 .overlay {
                     Text(title)
