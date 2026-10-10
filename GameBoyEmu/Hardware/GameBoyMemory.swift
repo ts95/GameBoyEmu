@@ -45,6 +45,10 @@ private let SOUND_REGISTERS_END: Int = 0xFF3F
 private let DMA_REGISTER: Int = 0xFF46
 
 private let VRAM_BANK_REGISTER: Int = 0xFF4F
+private let HDMA_SOURCE_HIGH_REGISTER: Int = 0xFF51
+private let HDMA_SOURCE_LOW_REGISTER: Int = 0xFF52
+private let HDMA_DESTINATION_HIGH_REGISTER: Int = 0xFF53
+private let HDMA_DESTINATION_LOW_REGISTER: Int = 0xFF54
 private let HDMA_CONTROL_REGISTER: Int = 0xFF55
 private let BACKGROUND_PALETTE_INDEX_REGISTER: Int = 0xFF68
 private let BACKGROUND_PALETTE_DATA_REGISTER: Int = 0xFF69
@@ -107,6 +111,13 @@ class GameBoyMemory: AddressBusProtocol {
     // index register and a data register.
     var backgroundPalettes = [UInt8](repeating: 0xFF, count: 64)
     var objectPalettes = [UInt8](repeating: 0xFF, count: 64)
+
+    // HDMA: a Game Boy Color feature that copies data from ROM or RAM into video RAM.
+    // The addresses advance as blocks of 16 bytes are copied.
+    private var transferSource = 0
+    private var transferDestination = 0
+    private var transferBlocksRemaining = 0
+    private var isHBlankTransferActive = false
 
     // Object Attribute Memory: Used by the PPU for sprite attributes.
     var oam: Array<UInt8>
@@ -230,7 +241,10 @@ class GameBoyMemory: AddressBusProtocol {
             case WRAM_BANK_REGISTER where isColorMode:
                 return UInt8(wramBank) | 0xF8
             case HDMA_CONTROL_REGISTER where isColorMode:
-                return 0xFF // No transfer in progress
+                // The blocks left, minus one. Bit 7 is clear while an HBlank transfer is running,
+                // so 0xFF means "finished".
+                let remaining = UInt8(truncatingIfNeeded: transferBlocksRemaining - 1)
+                return isHBlankTransferActive ? remaining & 0x7F : remaining | 0x80
             case BACKGROUND_PALETTE_DATA_REGISTER where isColorMode:
                 return backgroundPalettes[Int(ioPorts[BACKGROUND_PALETTE_INDEX_REGISTER - IO_PORTS_START] & 0x3F)]
             case OBJECT_PALETTE_DATA_REGISTER where isColorMode:
@@ -299,8 +313,16 @@ class GameBoyMemory: AddressBusProtocol {
                 writePaletteData(newValue, to: &backgroundPalettes, indexRegister: BACKGROUND_PALETTE_INDEX_REGISTER)
             case OBJECT_PALETTE_DATA_REGISTER where isColorMode:
                 writePaletteData(newValue, to: &objectPalettes, indexRegister: OBJECT_PALETTE_INDEX_REGISTER)
+            case HDMA_SOURCE_HIGH_REGISTER where isColorMode:
+                transferSource = (transferSource & 0x00FF) | Int(newValue) << 8
+            case HDMA_SOURCE_LOW_REGISTER where isColorMode:
+                transferSource = (transferSource & 0xFF00) | Int(newValue & 0xF0)
+            case HDMA_DESTINATION_HIGH_REGISTER where isColorMode:
+                transferDestination = (transferDestination & 0x00FF) | Int(newValue & 0x1F) << 8
+            case HDMA_DESTINATION_LOW_REGISTER where isColorMode:
+                transferDestination = (transferDestination & 0xFF00) | Int(newValue & 0xF0)
             case HDMA_CONTROL_REGISTER where isColorMode:
-                transferToVideoRAM(control: newValue)
+                writeTransferControl(newValue)
             case IO_PORTS_START...IO_PORTS_END:
                 ioPorts[address - IO_PORTS_START] = newValue
             case HRAM_START...HRAM_END:
@@ -340,6 +362,8 @@ class GameBoyMemory: AddressBusProtocol {
         vramBank = 0
         wramBank = 1
         bank1High = 0
+        transferBlocksRemaining = 0
+        isHBlankTransferActive = false
 
         // A Color game sets its own palettes. An original game gets the ones the Game Boy
         // Color's boot program would pick for it: background palette 0 and sprite palettes
@@ -437,18 +461,54 @@ class GameBoyMemory: AddressBusProtocol {
         }
     }
 
-    /// HDMA: copies up to 2KB from ROM or RAM into video RAM. The source and destination
-    /// addresses come from the four registers before the control register.
+    /// Handles a write to the HDMA control register, which starts or stops a transfer.
     ///
-    /// ponytail: the "one block per HBlank" mode is done all at once, like the general-purpose
-    /// mode. Spread it over the scanlines if a game's mid-frame effects depend on the timing.
-    private func transferToVideoRAM(control: UInt8) {
-        let source = (Int(ioPorts[0x51]) << 8 | Int(ioPorts[0x52])) & 0xFFF0
-        let destination = VRAM_START + ((Int(ioPorts[0x53]) << 8 | Int(ioPorts[0x54])) & 0x1FF0)
-        let length = (Int(control & 0x7F) + 1) * 16
+    /// Bit 7 picks the kind of transfer and the other bits give its length, in blocks of
+    /// 16 bytes, minus one. With bit 7 clear everything is copied at once. With bit 7 set,
+    /// one block is copied in each HBlank from then on, which lets a game update graphics
+    /// while the screen is being drawn.
+    ///
+    /// Writing with bit 7 clear while an HBlank transfer is running doesn't start anything:
+    /// it stops that transfer. Games use this to copy an exact number of blocks.
+    private func writeTransferControl(_ value: UInt8) {
+        if isHBlankTransferActive && value & 0x80 == 0 {
+            isHBlankTransferActive = false
+            return
+        }
 
-        for offset in 0..<length where destination + offset <= VRAM_END {
-            self[destination + offset] = self[source + offset]
+        transferBlocksRemaining = Int(value & 0x7F) + 1
+
+        if value & 0x80 == 0 {
+            while transferBlocksRemaining > 0 {
+                transferBlock()
+            }
+        } else {
+            isHBlankTransferActive = true
+            // With the LCD off there are no HBlanks; the hardware copies one block right away
+            if self[0xFF40] & 0x80 == 0 {
+                transferBlock()
+            }
+        }
+    }
+
+    /// Copies the next 16 bytes of the current transfer into video RAM.
+    private func transferBlock() {
+        for offset in 0..<16 {
+            let destination = VRAM_START + ((transferDestination + offset) & 0x1FFF)
+            self[destination] = self[(transferSource + offset) & 0xFFFF]
+        }
+        // The addresses move along, so a following transfer carries on where this one ended
+        transferSource += 16
+        transferDestination += 16
+        transferBlocksRemaining -= 1
+        if transferBlocksRemaining == 0 {
+            isHBlankTransferActive = false
+        }
+    }
+
+    func horizontalBlankDidStart() {
+        if isHBlankTransferActive {
+            transferBlock()
         }
     }
 
@@ -495,4 +555,7 @@ protocol AddressBusProtocol {
 
     /// One of the 32 background or 32 sprite colors, as 15-bit RGB with red in the low bits.
     func colorPaletteEntry(isObject: Bool, index: Int) -> UInt16
+
+    /// Called by the PPU each time it finishes drawing a visible scanline.
+    func horizontalBlankDidStart()
 }

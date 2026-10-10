@@ -142,6 +142,7 @@ class GameBoyPPU<AddressBus: AddressBusProtocol> {
                 modeClock -= 172
                 renderScanline()
                 enter(mode: .hBlank)
+                addressBus.horizontalBlankDidStart()
             }
         case .hBlank:
             if modeClock >= 204 {

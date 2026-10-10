@@ -415,6 +415,47 @@ private func run(_ apu: GameBoyAPU, seconds: Double) {
     #expect(memory[0xFF68] & 0x3F == 4) // The index moved on by itself
 }
 
+@Test func hdmaCopiesEverythingAtOnceInGeneralPurposeMode() throws {
+    let memory = try makeGameBoy(isColor: true).memory
+    for offset in 0..<48 { memory[0xC000 + offset] = UInt8(offset + 1) }
+
+    memory[0xFF51] = 0xC0 // Source 0xC000
+    memory[0xFF52] = 0x00
+    memory[0xFF53] = 0x00 // Destination 0x8000
+    memory[0xFF54] = 0x00
+    memory[0xFF55] = 0x02 // Three blocks of 16 bytes, now
+
+    #expect(memory[0x8000] == 1)
+    #expect(memory[0x802F] == 48)
+    #expect(memory[0x8030] == 0)
+    #expect(memory[0xFF55] == 0xFF) // Finished
+}
+
+@Test func hdmaCopiesOneBlockPerHBlankAndCanBeStopped() throws {
+    let memory = try makeGameBoy(isColor: true).memory
+    for offset in 0..<48 { memory[0xC000 + offset] = UInt8(offset + 1) }
+
+    memory[0xFF51] = 0xC0
+    memory[0xFF52] = 0x00
+    memory[0xFF53] = 0x00
+    memory[0xFF54] = 0x00
+    memory[0xFF55] = 0x82 // Three blocks, one per HBlank
+    #expect(memory[0x8000] == 0) // Nothing yet
+    #expect(memory[0xFF55] == 0x02) // Running, three blocks to go
+
+    memory.horizontalBlankDidStart()
+    #expect(memory[0x800F] == 16)
+    #expect(memory[0x8010] == 0)
+    #expect(memory[0xFF55] == 0x01)
+
+    // Pokemon Crystal asks for one block too many and then stops the transfer like this.
+    // It must not be taken for a request to start a new one.
+    memory[0xFF55] = 0x01
+    memory.horizontalBlankDidStart()
+    #expect(memory[0x8010] == 0)
+    #expect(memory[0xFF55] == 0x81) // Stopped, with two blocks left undone
+}
+
 @Test func ppuDrawsBackgroundTilesInColor() throws {
     let gameBoy = try makeGameBoy(isColor: true)
     let memory = gameBoy.memory
