@@ -97,6 +97,18 @@ struct LibraryView: View {
             .onAppear {
                 library.reload()
             }
+            #if canImport(WatchConnectivity)
+            .onReceive(NotificationCenter.default.publisher(for: WatchSync.didReceiveFile)) { notification in
+                library.reload()
+                // A save made on the watch has arrived. A game frozen here still holds the
+                // older one in memory and would write it back, so it starts over from the
+                // new save. One that is on screen right now is left to carry on.
+                let games = library.included + library.recent
+                if let game = games.first(where: { $0.id == notification.object as? String }), !path.contains(game) {
+                    sessions.end(game)
+                }
+            }
+            #endif
         }
     }
 

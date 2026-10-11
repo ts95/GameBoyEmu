@@ -45,8 +45,10 @@ final class GameLibrary {
     private(set) var recent: [Game] = []
 
     /// Bundled ROMs to offer, by file name. ROMs that aren't in the bundle are left out.
-    private static let includedROMNames = ["pokemon_red"]
-    private static let romsDirectory = URL.applicationSupportDirectory.appending(path: "ROMs")
+    nonisolated static let includedROMNames = ["pokemon_red"]
+    /// Where the ROMs the player opened are kept. On the watch, these are the ones the
+    /// phone has sent over.
+    nonisolated static let romsDirectory = URL.applicationSupportDirectory.appending(path: "ROMs")
     private static let lastPlayedKey = "lastPlayed"
     private static let customTitlesKey = "customTitles"
 

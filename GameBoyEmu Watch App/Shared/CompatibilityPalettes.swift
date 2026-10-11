@@ -1,0 +1,1 @@
+../../GameBoyEmu/Hardware/CompatibilityPalettes.swift

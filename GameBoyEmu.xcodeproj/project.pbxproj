@@ -26,6 +26,9 @@
 		E23EB4C3307AFBF100A9E387 /* LinkCable.swift in Sources */ = {isa = PBXBuildFile; fileRef = E23EB4C2307AFBF100A9E387 /* LinkCable.swift */; };
 		E23EB4C8307AFF1A00A9E387 /* NetworkLink.swift in Sources */ = {isa = PBXBuildFile; fileRef = E23EB4C7307AFF1A00A9E387 /* NetworkLink.swift */; };
 		E23EB4CA307B87FB00A9E387 /* LinkView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E23EB4C9307B87FB00A9E387 /* LinkView.swift */; };
+		E23EB4DC307B91A900A9E387 /* GameBoyEmu Watch App.app in Embed Watch Content */ = {isa = PBXBuildFile; fileRef = E23EB4DB307B91A900A9E387 /* GameBoyEmu Watch App.app */; platformFilter = ios; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		E23EB50A307B93CB00A9E387 /* MotionControls.swift in Sources */ = {isa = PBXBuildFile; fileRef = E23EB509307B93CB00A9E387 /* MotionControls.swift */; };
+		E23EB50E307B93E400A9E387 /* WatchSync.swift in Sources */ = {isa = PBXBuildFile; fileRef = E23EB50D307B93E400A9E387 /* WatchSync.swift */; };
 		E2443A9C2C3CA5DB00113A62 /* GameBoy.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2443A9B2C3CA5DB00113A62 /* GameBoy.swift */; };
 		E2443AA02C3CAB8B00113A62 /* pokemon_red.gb in Resources */ = {isa = PBXBuildFile; fileRef = E2443A9F2C3CAB8B00113A62 /* pokemon_red.gb */; };
 		E2443AA32C3D3B9100113A62 /* CPUInstruction+CustomDebugStringConvertible.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2443AA22C3D3B9100113A62 /* CPUInstruction+CustomDebugStringConvertible.swift */; };
@@ -46,7 +49,28 @@
 			remoteGlobalIDString = E2674EA52C281FA500EE0206;
 			remoteInfo = GameBoyEmu;
 		};
+		E23EB4DD307B91A900A9E387 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = E2674E9E2C281FA500EE0206 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = E23EB4DA307B91A900A9E387;
+			remoteInfo = "GameBoyEmu Watch App";
+		};
 /* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		E23EB4E9307B91AA00A9E387 /* Embed Watch Content */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "$(CONTENTS_FOLDER_PATH)/Watch";
+			dstSubfolderSpec = 16;
+			files = (
+				E23EB4DC307B91A900A9E387 /* GameBoyEmu Watch App.app in Embed Watch Content */,
+			);
+			name = "Embed Watch Content";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
 		E22BEDCE2C34A2200061C4D2 /* GameBoyCPU.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GameBoyCPU.swift; sourceTree = "<group>"; };
@@ -70,6 +94,9 @@
 		E23EB4C6307AFE4F00A9E387 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		E23EB4C7307AFF1A00A9E387 /* NetworkLink.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetworkLink.swift; sourceTree = "<group>"; };
 		E23EB4C9307B87FB00A9E387 /* LinkView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LinkView.swift; sourceTree = "<group>"; };
+		E23EB4DB307B91A900A9E387 /* GameBoyEmu Watch App.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "GameBoyEmu Watch App.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		E23EB509307B93CB00A9E387 /* MotionControls.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MotionControls.swift; sourceTree = "<group>"; };
+		E23EB50D307B93E400A9E387 /* WatchSync.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchSync.swift; sourceTree = "<group>"; };
 		E2443A9B2C3CA5DB00113A62 /* GameBoy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GameBoy.swift; sourceTree = "<group>"; };
 		E2443A9F2C3CAB8B00113A62 /* pokemon_red.gb */ = {isa = PBXFileReference; lastKnownFileType = file; path = pokemon_red.gb; sourceTree = "<group>"; };
 		E2443AA22C3D3B9100113A62 /* CPUInstruction+CustomDebugStringConvertible.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CPUInstruction+CustomDebugStringConvertible.swift"; sourceTree = "<group>"; };
@@ -86,10 +113,18 @@
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		E23D545C307AD77A0004A0DC /* GameBoyEmuTests */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = GameBoyEmuTests; sourceTree = "<group>"; };
+		E23EB4DF307B91A900A9E387 /* GameBoyEmu Watch App */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = "GameBoyEmu Watch App"; sourceTree = "<group>"; };
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
 		E23D5458307AD77A0004A0DC /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		E23EB4D8307B91A900A9E387 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -140,6 +175,7 @@
 				E23D5480307ADA770004A0DC /* Emulator.swift */,
 				E23D5466307ADA770004A0DC /* AudioOutput.swift */,
 				E23EB4C7307AFF1A00A9E387 /* NetworkLink.swift */,
+				E23EB509307B93CB00A9E387 /* MotionControls.swift */,
 			);
 			path = Emulation;
 			sourceTree = "<group>";
@@ -149,6 +185,7 @@
 			children = (
 				E23EB4A2307AE8D200A9E387 /* GameLibrary.swift */,
 				E23EB4A6307AECD800A9E387 /* GameCatalogue.swift */,
+				E23EB50D307B93E400A9E387 /* WatchSync.swift */,
 			);
 			path = Library;
 			sourceTree = "<group>";
@@ -180,6 +217,7 @@
 			children = (
 				E2674EA82C281FA500EE0206 /* GameBoyEmu */,
 				E23D545C307AD77A0004A0DC /* GameBoyEmuTests */,
+				E23EB4DF307B91A900A9E387 /* GameBoyEmu Watch App */,
 				E2674EA72C281FA500EE0206 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -189,6 +227,7 @@
 			children = (
 				E2674EA62C281FA500EE0206 /* GameBoyEmu.app */,
 				E23D545B307AD77A0004A0DC /* GameBoyEmuTests.xctest */,
+				E23EB4DB307B91A900A9E387 /* GameBoyEmu Watch App.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -244,6 +283,28 @@
 			productReference = E23D545B307AD77A0004A0DC /* GameBoyEmuTests.xctest */;
 			productType = "com.apple.product-type.bundle.unit-test";
 		};
+		E23EB4DA307B91A900A9E387 /* GameBoyEmu Watch App */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = E23EB4E6307B91AA00A9E387 /* Build configuration list for PBXNativeTarget "GameBoyEmu Watch App" */;
+			buildPhases = (
+				E23EB4D7307B91A900A9E387 /* Sources */,
+				E23EB4D8307B91A900A9E387 /* Frameworks */,
+				E23EB4D9307B91A900A9E387 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				E23EB4DF307B91A900A9E387 /* GameBoyEmu Watch App */,
+			);
+			name = "GameBoyEmu Watch App";
+			packageProductDependencies = (
+			);
+			productName = "GameBoyEmu Watch App";
+			productReference = E23EB4DB307B91A900A9E387 /* GameBoyEmu Watch App.app */;
+			productType = "com.apple.product-type.application";
+		};
 		E2674EA52C281FA500EE0206 /* GameBoyEmu */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = E2674EB72C281FA600EE0206 /* Build configuration list for PBXNativeTarget "GameBoyEmu" */;
@@ -251,10 +312,12 @@
 				E2674EA22C281FA500EE0206 /* Sources */,
 				E2674EA32C281FA500EE0206 /* Frameworks */,
 				E2674EA42C281FA500EE0206 /* Resources */,
+				E23EB4E9307B91AA00A9E387 /* Embed Watch Content */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				E23EB4DE307B91A900A9E387 /* PBXTargetDependency */,
 			);
 			name = GameBoyEmu;
 			productName = GameBoyEmu;
@@ -274,6 +337,9 @@
 					E23D545A307AD77A0004A0DC = {
 						CreatedOnToolsVersion = 27.2;
 						TestTargetID = E2674EA52C281FA500EE0206;
+					};
+					E23EB4DA307B91A900A9E387 = {
+						CreatedOnToolsVersion = 27.2;
 					};
 					E2674EA52C281FA500EE0206 = {
 						CreatedOnToolsVersion = 15.3;
@@ -295,12 +361,20 @@
 			targets = (
 				E2674EA52C281FA500EE0206 /* GameBoyEmu */,
 				E23D545A307AD77A0004A0DC /* GameBoyEmuTests */,
+				E23EB4DA307B91A900A9E387 /* GameBoyEmu Watch App */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
 		E23D5459307AD77A0004A0DC /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		E23EB4D9307B91A900A9E387 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -329,6 +403,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		E23EB4D7307B91A900A9E387 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		E2674EA22C281FA500EE0206 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -338,10 +419,12 @@
 				E22BEDD72C34CAAB0061C4D2 /* JoypadState.swift in Sources */,
 				E23EB4A3307AE8D200A9E387 /* GameLibrary.swift in Sources */,
 				E2443A9C2C3CA5DB00113A62 /* GameBoy.swift in Sources */,
+				E23EB50A307B93CB00A9E387 /* MotionControls.swift in Sources */,
 				E23EB4C8307AFF1A00A9E387 /* NetworkLink.swift in Sources */,
 				E22BEDDD2C3C16C40061C4D2 /* CPUInstruction.swift in Sources */,
 				E22BEDD52C34C7090061C4D2 /* GameBoyPPU.swift in Sources */,
 				E23EB4A1307AE6FE00A9E387 /* CompatibilityPalettes.swift in Sources */,
+				E23EB50E307B93E400A9E387 /* WatchSync.swift in Sources */,
 				E23D5467307ADA770004A0DC /* AudioOutput.swift in Sources */,
 				E23EB4CA307B87FB00A9E387 /* LinkView.swift in Sources */,
 				E23D5481307ADA770004A0DC /* Emulator.swift in Sources */,
@@ -367,6 +450,12 @@
 			isa = PBXTargetDependency;
 			target = E2674EA52C281FA500EE0206 /* GameBoyEmu */;
 			targetProxy = E23D5470307AD77A0004A0DC /* PBXContainerItemProxy */;
+		};
+		E23EB4DE307B91A900A9E387 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			platformFilter = ios;
+			target = E23EB4DA307B91A900A9E387 /* GameBoyEmu Watch App */;
+			targetProxy = E23EB4DD307B91A900A9E387 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -414,6 +503,69 @@
 				SWIFT_VERSION = 6.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/GameBoyEmu.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/GameBoyEmu";
+			};
+			name = Release;
+		};
+		E23EB4E7307B91AA00A9E387 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = FE6WMDZ3AJ;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = "Game Boy Emu";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
+				INFOPLIST_KEY_WKCompanionAppBundleIdentifier = no.tonisucic.GameBoyEmu;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = no.tonisucic.GameBoyEmu.watchkitapp;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = watchos;
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = 4;
+				WATCHOS_DEPLOYMENT_TARGET = 27.2;
+			};
+			name = Debug;
+		};
+		E23EB4E8307B91AA00A9E387 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = FE6WMDZ3AJ;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = "Game Boy Emu";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
+				INFOPLIST_KEY_WKCompanionAppBundleIdentifier = no.tonisucic.GameBoyEmu;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = no.tonisucic.GameBoyEmu.watchkitapp;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = watchos;
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = 4;
+				VALIDATE_PRODUCT = YES;
+				WATCHOS_DEPLOYMENT_TARGET = 27.2;
 			};
 			name = Release;
 		};
@@ -653,6 +805,15 @@
 			buildConfigurations = (
 				E23D545F307AD77A0004A0DC /* Debug */,
 				E23D5460307AD77A0004A0DC /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		E23EB4E6307B91AA00A9E387 /* Build configuration list for PBXNativeTarget "GameBoyEmu Watch App" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				E23EB4E7307B91AA00A9E387 /* Debug */,
+				E23EB4E8307B91AA00A9E387 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
