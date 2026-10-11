@@ -13,6 +13,7 @@
 		E22BEDD72C34CAAB0061C4D2 /* JoypadState.swift in Sources */ = {isa = PBXBuildFile; fileRef = E22BEDD62C34CAAB0061C4D2 /* JoypadState.swift */; };
 		E22BEDDA2C354DBA0061C4D2 /* KeyboardControls.swift in Sources */ = {isa = PBXBuildFile; fileRef = E22BEDD92C354DBA0061C4D2 /* KeyboardControls.swift */; };
 		E22BEDDD2C3C16C40061C4D2 /* CPUInstruction.swift in Sources */ = {isa = PBXBuildFile; fileRef = E22BEDDC2C3C16C40061C4D2 /* CPUInstruction.swift */; };
+		E23921D3307BBF83009C9F64 /* CloudSaves.swift in Sources */ = {isa = PBXBuildFile; fileRef = E23921D2307BBF83009C9F64 /* CloudSaves.swift */; };
 		E23D5465307ADA770004A0DC /* GameBoyAPU.swift in Sources */ = {isa = PBXBuildFile; fileRef = E23D5464307ADA770004A0DC /* GameBoyAPU.swift */; };
 		E23D5467307ADA770004A0DC /* AudioOutput.swift in Sources */ = {isa = PBXBuildFile; fileRef = E23D5466307ADA770004A0DC /* AudioOutput.swift */; };
 		E23D5481307ADA770004A0DC /* Emulator.swift in Sources */ = {isa = PBXBuildFile; fileRef = E23D5480307ADA770004A0DC /* Emulator.swift */; };
@@ -80,6 +81,7 @@
 		E22BEDD62C34CAAB0061C4D2 /* JoypadState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JoypadState.swift; sourceTree = "<group>"; };
 		E22BEDD92C354DBA0061C4D2 /* KeyboardControls.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyboardControls.swift; sourceTree = "<group>"; };
 		E22BEDDC2C3C16C40061C4D2 /* CPUInstruction.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CPUInstruction.swift; sourceTree = "<group>"; };
+		E23921D2307BBF83009C9F64 /* CloudSaves.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudSaves.swift; sourceTree = "<group>"; };
 		E23D545B307AD77A0004A0DC /* GameBoyEmuTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = GameBoyEmuTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		E23D5464307ADA770004A0DC /* GameBoyAPU.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GameBoyAPU.swift; sourceTree = "<group>"; };
 		E23D5466307ADA770004A0DC /* AudioOutput.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioOutput.swift; sourceTree = "<group>"; };
@@ -188,6 +190,7 @@
 				E23EB4A2307AE8D200A9E387 /* GameLibrary.swift */,
 				E23EB4A6307AECD800A9E387 /* GameCatalogue.swift */,
 				E23EB50D307B93E400A9E387 /* WatchSync.swift */,
+				E23921D2307BBF83009C9F64 /* CloudSaves.swift */,
 			);
 			path = Library;
 			sourceTree = "<group>";
@@ -441,6 +444,7 @@
 				E2674EAC2C281FA500EE0206 /* GameBoyView.swift in Sources */,
 				E23D5483307ADA770004A0DC /* GameBoyViewModel.swift in Sources */,
 				E22BEDCF2C34A2200061C4D2 /* GameBoyCPU.swift in Sources */,
+				E23921D3307BBF83009C9F64 /* CloudSaves.swift in Sources */,
 				E23D5465307ADA770004A0DC /* GameBoyAPU.swift in Sources */,
 				E2674EAA2C281FA500EE0206 /* GameBoyEmuApp.swift in Sources */,
 				E22BEDD32C34BFA10061C4D2 /* GameBoyMemory.swift in Sources */,

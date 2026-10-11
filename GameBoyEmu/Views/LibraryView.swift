@@ -18,6 +18,7 @@ struct LibraryView: View {
     @State private var gameToRename: Game?
     @State private var newName = ""
     @State private var error: GameBoyError?
+    @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
         NavigationStack(path: $path) {
@@ -74,6 +75,9 @@ struct LibraryView: View {
                         // A game in progress still holds its save in memory and would write
                         // it back, so it has to start over too
                         sessions.end(game)
+                        Task {
+                            await CloudSaves.forget(game.id)
+                        }
                     }
                 }
             } message: { _ in
@@ -96,6 +100,19 @@ struct LibraryView: View {
             // Also runs when coming back from a game, which is when the save data has changed
             .onAppear {
                 library.reload()
+                Task {
+                    // ponytail: the emulator writes the save a moment after the game is
+                    // left, and there is no telling exactly when. A second is plenty.
+                    try? await Task.sleep(for: .seconds(1))
+                    await syncSaves()
+                }
+            }
+            // Coming to the front fetches what other devices saved, and leaving sends
+            // what was saved here
+            .onChange(of: scenePhase) {
+                Task {
+                    await syncSaves()
+                }
             }
             #if canImport(WatchConnectivity)
             .onReceive(NotificationCenter.default.publisher(for: WatchSync.didReceiveFile)) { notification in
@@ -208,7 +225,25 @@ struct LibraryView: View {
     private func play(_ game: Game) {
         library.markPlayed(game)
         sessions.endIfFailed(game)
-        path = [game]
+        Task {
+            // Before the game reads its save: starting from an older one would end up
+            // overwriting the newer one in iCloud
+            await syncSaves(of: [game])
+            path = [game]
+        }
+    }
+
+    /// Brings save data in step with iCloud, for the given games or else all of them.
+    private func syncSaves(of games: [Game]? = nil) async {
+        let games = games ?? library.included + library.recent
+        let replaced = await CloudSaves.sync(games.map(\.id))
+        library.reload()
+        // A game frozen here still holds the older save in memory and would write it
+        // back, so it starts over from the new one. One that is on screen right now is
+        // left to carry on.
+        for game in games where replaced.contains(game.id) && !path.contains(game) {
+            sessions.end(game)
+        }
     }
 
     /// Runs something that can fail, and tells the player if it does.
