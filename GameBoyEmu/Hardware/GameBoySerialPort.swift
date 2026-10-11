@@ -28,16 +28,32 @@ final class GameBoySerialPort {
         didSet {
             if isTransferring && isClockSource {
                 cyclesRemaining = control & 0x02 != 0 ? 128 : 4096 // 8 bits at 262144 or 8192 Hz
+                // ponytail: the answer to a transfer the game gave up on would be taken for
+                // the answer to this one. Number the messages if a game restarts transfers.
+                isAwaitingReply = false
             }
         }
     }
 
-    /// The serial port at the other end of the link cable, if one is plugged in.
-    weak var partner: GameBoySerialPort?
+    /// The link cable: carries a message to the console at the other end, whose answers
+    /// come back through `receive(_:)`. Nil when nothing is plugged in.
+    ///
+    /// The other end may be in the same process or on another device, so an answer can
+    /// take any amount of time to arrive.
+    var cable: ((LinkMessage) -> Void)? {
+        didSet {
+            if isAwaitingReply {
+                finish(receiving: 0xFF) // The answer is never going to come down the old cable
+            }
+        }
+    }
 
     private var cyclesRemaining = 0
-    /// Set when the console at the other end has completed a transfer with this one.
-    private var hasReceivedFromPartner = false
+    /// Set once this console has clocked its byte out, until the other one's byte comes back.
+    /// On hardware that takes no time at all. Here the transfer is held open instead, which
+    /// to the game looks like a slow cable.
+    private var isAwaitingReply = false
+    private var hasFinishedTransfer = false
 
     private var isTransferring: Bool { control & 0x80 != 0 }
     private var isClockSource: Bool { control & 0x01 != 0 }
@@ -46,41 +62,56 @@ final class GameBoySerialPort {
     ///
     /// - Returns: Whether a transfer finished, meaning the serial interrupt should be requested.
     func tick(cycles: Int) -> Bool {
-        if hasReceivedFromPartner {
-            hasReceivedFromPartner = false
-            return true
+        // Otherwise idle, or waiting for the other console: for its clock or for its answer
+        if isTransferring && isClockSource && !isAwaitingReply {
+            cyclesRemaining -= cycles
+            if cyclesRemaining <= 0 {
+                if let cable {
+                    isAwaitingReply = true
+                    cable(.clock(data))
+                } else {
+                    finish(receiving: 0xFF) // With nothing at the other end, the input line reads as all ones
+                }
+            }
         }
 
-        guard isTransferring && isClockSource else {
-            return false // Idle, or waiting for the other console's clock
-        }
-
-        cyclesRemaining -= cycles
-        guard cyclesRemaining <= 0 else {
-            return false
-        }
-
-        // With nothing at the other end, the input line reads as all ones
-        data = partner?.exchange(data) ?? 0xFF
-        control &= 0x7F
-        return true
+        defer { hasFinishedTransfer = false }
+        return hasFinishedTransfer
     }
 
-    /// Takes part in a transfer clocked by the console at the other end.
-    ///
-    /// - Parameter incoming: The byte the other console sends.
-    /// - Returns: The byte this console sends back.
-    private func exchange(_ incoming: UInt8) -> UInt8 {
-        // ponytail: a console that hasn't set up a transfer is treated as not being there.
-        // On hardware its shift register still moves with the incoming clock.
-        guard isTransferring && !isClockSource else {
-            return 0xFF
-        }
+    /// Takes a message that has come down the cable from the other console.
+    func receive(_ message: LinkMessage) {
+        switch message {
+        case .clock(let incoming):
+            // ponytail: a console that hasn't set up a transfer is treated as not being there.
+            // On hardware its shift register still moves with the incoming clock.
+            guard isTransferring && !isClockSource else {
+                cable?(.reply(0xFF))
+                return
+            }
+            let outgoing = data
+            finish(receiving: incoming)
+            cable?(.reply(outgoing))
 
-        let outgoing = data
-        data = incoming
-        control &= 0x7F
-        hasReceivedFromPartner = true
-        return outgoing
+        case .reply(let incoming):
+            if isAwaitingReply {
+                finish(receiving: incoming)
+            }
+        }
     }
+
+    private func finish(receiving byte: UInt8) {
+        data = byte
+        control &= 0x7F
+        isAwaitingReply = false
+        hasFinishedTransfer = true
+    }
+}
+
+/// What travels along a link cable.
+enum LinkMessage: Equatable, Sendable {
+    /// The console providing the clock has shifted this byte out.
+    case clock(UInt8)
+    /// The other console's answer: the byte it shifted out in return.
+    case reply(UInt8)
 }

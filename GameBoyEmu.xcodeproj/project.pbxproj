@@ -24,6 +24,8 @@
 		E23EB4A7307AECD800A9E387 /* GameCatalogue.swift in Sources */ = {isa = PBXBuildFile; fileRef = E23EB4A6307AECD800A9E387 /* GameCatalogue.swift */; };
 		E23EB4C1307AFBF100A9E387 /* GameBoySerialPort.swift in Sources */ = {isa = PBXBuildFile; fileRef = E23EB4C0307AFBF100A9E387 /* GameBoySerialPort.swift */; };
 		E23EB4C3307AFBF100A9E387 /* LinkCable.swift in Sources */ = {isa = PBXBuildFile; fileRef = E23EB4C2307AFBF100A9E387 /* LinkCable.swift */; };
+		E23EB4C8307AFF1A00A9E387 /* NetworkLink.swift in Sources */ = {isa = PBXBuildFile; fileRef = E23EB4C7307AFF1A00A9E387 /* NetworkLink.swift */; };
+		E23EB4CA307B87FB00A9E387 /* LinkView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E23EB4C9307B87FB00A9E387 /* LinkView.swift */; };
 		E2443A9C2C3CA5DB00113A62 /* GameBoy.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2443A9B2C3CA5DB00113A62 /* GameBoy.swift */; };
 		E2443AA02C3CAB8B00113A62 /* pokemon_red.gb in Resources */ = {isa = PBXBuildFile; fileRef = E2443A9F2C3CAB8B00113A62 /* pokemon_red.gb */; };
 		E2443AA32C3D3B9100113A62 /* CPUInstruction+CustomDebugStringConvertible.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2443AA22C3D3B9100113A62 /* CPUInstruction+CustomDebugStringConvertible.swift */; };
@@ -65,6 +67,9 @@
 		E23EB4A6307AECD800A9E387 /* GameCatalogue.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GameCatalogue.swift; sourceTree = "<group>"; };
 		E23EB4C0307AFBF100A9E387 /* GameBoySerialPort.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GameBoySerialPort.swift; sourceTree = "<group>"; };
 		E23EB4C2307AFBF100A9E387 /* LinkCable.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LinkCable.swift; sourceTree = "<group>"; };
+		E23EB4C6307AFE4F00A9E387 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		E23EB4C7307AFF1A00A9E387 /* NetworkLink.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetworkLink.swift; sourceTree = "<group>"; };
+		E23EB4C9307B87FB00A9E387 /* LinkView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LinkView.swift; sourceTree = "<group>"; };
 		E2443A9B2C3CA5DB00113A62 /* GameBoy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GameBoy.swift; sourceTree = "<group>"; };
 		E2443A9F2C3CAB8B00113A62 /* pokemon_red.gb */ = {isa = PBXFileReference; lastKnownFileType = file; path = pokemon_red.gb; sourceTree = "<group>"; };
 		E2443AA22C3D3B9100113A62 /* CPUInstruction+CustomDebugStringConvertible.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CPUInstruction+CustomDebugStringConvertible.swift"; sourceTree = "<group>"; };
@@ -134,6 +139,7 @@
 			children = (
 				E23D5480307ADA770004A0DC /* Emulator.swift */,
 				E23D5466307ADA770004A0DC /* AudioOutput.swift */,
+				E23EB4C7307AFF1A00A9E387 /* NetworkLink.swift */,
 			);
 			path = Emulation;
 			sourceTree = "<group>";
@@ -154,6 +160,7 @@
 				E23D5482307ADA770004A0DC /* GameBoyViewModel.swift */,
 				E23EB4A4307AE8D200A9E387 /* LibraryView.swift */,
 				E22BEDD92C354DBA0061C4D2 /* JoypadState+Keyboard.swift */,
+				E23EB4C9307B87FB00A9E387 /* LinkView.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -189,6 +196,7 @@
 		E2674EA82C281FA500EE0206 /* GameBoyEmu */ = {
 			isa = PBXGroup;
 			children = (
+				E23EB4C6307AFE4F00A9E387 /* Info.plist */,
 				E2443AA12C3CAB9300113A62 /* Views */,
 				E22BEDCD2C34A1D00061C4D2 /* Hardware */,
 				E2443AAA2C3D81E700113A62 /* ROMs */,
@@ -261,7 +269,7 @@
 			attributes = {
 				BuildIndependentTargetsInParallel = 1;
 				LastSwiftUpdateCheck = 2720;
-				LastUpgradeCheck = 1530;
+				LastUpgradeCheck = 2720;
 				TargetAttributes = {
 					E23D545A307AD77A0004A0DC = {
 						CreatedOnToolsVersion = 27.2;
@@ -330,10 +338,12 @@
 				E22BEDD72C34CAAB0061C4D2 /* JoypadState.swift in Sources */,
 				E23EB4A3307AE8D200A9E387 /* GameLibrary.swift in Sources */,
 				E2443A9C2C3CA5DB00113A62 /* GameBoy.swift in Sources */,
+				E23EB4C8307AFF1A00A9E387 /* NetworkLink.swift in Sources */,
 				E22BEDDD2C3C16C40061C4D2 /* CPUInstruction.swift in Sources */,
 				E22BEDD52C34C7090061C4D2 /* GameBoyPPU.swift in Sources */,
 				E23EB4A1307AE6FE00A9E387 /* CompatibilityPalettes.swift in Sources */,
 				E23D5467307ADA770004A0DC /* AudioOutput.swift in Sources */,
+				E23EB4CA307B87FB00A9E387 /* LinkView.swift in Sources */,
 				E23D5481307ADA770004A0DC /* Emulator.swift in Sources */,
 				E23EB4A5307AE8D200A9E387 /* LibraryView.swift in Sources */,
 				E22BEDDA2C354DBA0061C4D2 /* JoypadState+Keyboard.swift in Sources */,
@@ -367,10 +377,10 @@
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = FE6WMDZ3AJ;
+				DEAD_CODE_STRIPPING = YES;
 				GENERATE_INFOPLIST_FILE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
-				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				MACOSX_DEPLOYMENT_TARGET = 26.0;
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = no.tonisucic.GameBoyEmuTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -390,10 +400,10 @@
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = FE6WMDZ3AJ;
+				DEAD_CODE_STRIPPING = YES;
 				GENERATE_INFOPLIST_FILE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
-				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				MACOSX_DEPLOYMENT_TARGET = 26.0;
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = no.tonisucic.GameBoyEmuTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -441,7 +451,9 @@
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
+				DEAD_CODE_STRIPPING = YES;
 				DEBUG_INFORMATION_FORMAT = dwarf;
+				DEVELOPMENT_TEAM = FE6WMDZ3AJ;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
@@ -463,6 +475,7 @@
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 			};
@@ -502,7 +515,9 @@
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
+				DEAD_CODE_STRIPPING = YES;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				DEVELOPMENT_TEAM = FE6WMDZ3AJ;
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
@@ -517,6 +532,7 @@
 				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_COMPILATION_MODE = wholemodule;
 			};
 			name = Release;
@@ -530,13 +546,26 @@
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_ASSET_PATHS = "\"GameBoyEmu/Preview Content\"";
-				DEVELOPMENT_TEAM = FE6WMDZ3AJ;
+				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_INCOMING_NETWORK_CONNECTIONS = YES;
+				ENABLE_OUTGOING_NETWORK_CONNECTIONS = YES;
 				ENABLE_PREVIEWS = YES;
+				ENABLE_RESOURCE_ACCESS_AUDIO_INPUT = NO;
+				ENABLE_RESOURCE_ACCESS_BLUETOOTH = NO;
+				ENABLE_RESOURCE_ACCESS_CALENDARS = NO;
+				ENABLE_RESOURCE_ACCESS_CAMERA = NO;
+				ENABLE_RESOURCE_ACCESS_CONTACTS = NO;
+				ENABLE_RESOURCE_ACCESS_LOCATION = NO;
+				ENABLE_RESOURCE_ACCESS_PRINTING = NO;
+				ENABLE_RESOURCE_ACCESS_USB = NO;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = GameBoyEmu/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "Game Boy Emu";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.games";
+				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "Game Boy Emu uses the local network to link with a nearby device, the way a link cable joins two Game Boys.";
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphoneos*]" = YES;
@@ -547,10 +576,10 @@
 				"INFOPLIST_KEY_UIStatusBarStyle[sdk=iphonesimulator*]" = UIStatusBarStyleDefault;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
-				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
 				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
-				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MACOSX_DEPLOYMENT_TARGET = 26.0;
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = no.tonisucic.GameBoyEmu;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -571,13 +600,26 @@
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_ASSET_PATHS = "\"GameBoyEmu/Preview Content\"";
-				DEVELOPMENT_TEAM = FE6WMDZ3AJ;
+				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_INCOMING_NETWORK_CONNECTIONS = YES;
+				ENABLE_OUTGOING_NETWORK_CONNECTIONS = YES;
 				ENABLE_PREVIEWS = YES;
+				ENABLE_RESOURCE_ACCESS_AUDIO_INPUT = NO;
+				ENABLE_RESOURCE_ACCESS_BLUETOOTH = NO;
+				ENABLE_RESOURCE_ACCESS_CALENDARS = NO;
+				ENABLE_RESOURCE_ACCESS_CAMERA = NO;
+				ENABLE_RESOURCE_ACCESS_CONTACTS = NO;
+				ENABLE_RESOURCE_ACCESS_LOCATION = NO;
+				ENABLE_RESOURCE_ACCESS_PRINTING = NO;
+				ENABLE_RESOURCE_ACCESS_USB = NO;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = GameBoyEmu/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "Game Boy Emu";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.games";
+				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "Game Boy Emu uses the local network to link with a nearby device, the way a link cable joins two Game Boys.";
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphoneos*]" = YES;
@@ -588,10 +630,10 @@
 				"INFOPLIST_KEY_UIStatusBarStyle[sdk=iphonesimulator*]" = UIStatusBarStyleDefault;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
-				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
 				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
-				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MACOSX_DEPLOYMENT_TARGET = 26.0;
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = no.tonisucic.GameBoyEmu;
 				PRODUCT_NAME = "$(TARGET_NAME)";

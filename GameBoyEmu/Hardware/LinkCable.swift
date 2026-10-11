@@ -7,7 +7,7 @@ import Foundation
 
 /// Two Game Boys joined by a link cable, in the same process.
 ///
-/// The cable itself is just each serial port knowing about the other. The harder part of
+/// The cable itself is just each serial port handing its messages to the other. The harder part of
 /// linking is time: a transfer only works if both consoles are at the same moment when it
 /// happens. So the two are advanced together, a single instruction at a time, always
 /// stepping the one that is behind.
@@ -22,13 +22,13 @@ final class LinkCable {
         self.first = first
         self.second = second
 
-        first.memory.serial.partner = second.memory.serial
-        second.memory.serial.partner = first.memory.serial
+        first.memory.serial.cable = { [weak port = second.memory.serial] in port?.receive($0) }
+        second.memory.serial.cable = { [weak port = first.memory.serial] in port?.receive($0) }
     }
 
     deinit {
-        first.memory.serial.partner = nil
-        second.memory.serial.partner = nil
+        first.memory.serial.cable = nil
+        second.memory.serial.cable = nil
     }
 
     /// Advances both consoles by the given number of cycles, keeping them within one

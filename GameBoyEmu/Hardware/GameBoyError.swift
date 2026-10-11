@@ -27,6 +27,10 @@ enum GameBoyError: LocalizedError, Equatable, Sendable {
     case saveNotWritten(reason: String)
     /// Sound couldn't be started. The game keeps running, silently.
     case audioUnavailable(reason: String)
+    /// A link with another device couldn't be set up.
+    case linkFailed(reason: String)
+    /// A link with another device ended without being unplugged here. The game keeps running.
+    case linkLost
     /// Anything that isn't one of the above.
     case unexpected(reason: String)
 
@@ -48,6 +52,10 @@ enum GameBoyError: LocalizedError, Equatable, Sendable {
             "Your progress couldn't be saved."
         case .audioUnavailable:
             "Sound isn't available."
+        case .linkFailed:
+            "The link cable couldn't be connected."
+        case .linkLost:
+            "The link cable came unplugged."
         case .unexpected:
             "Something went wrong."
         }
@@ -69,6 +77,10 @@ enum GameBoyError: LocalizedError, Equatable, Sendable {
             "You can keep playing, and saving will be tried again. \(reason)"
         case .audioUnavailable(let reason):
             "You can keep playing without sound. \(reason)"
+        case .linkFailed(let reason):
+            "Check that both devices are nearby with Wi-Fi switched on. \(reason)"
+        case .linkLost:
+            "The other device closed the link or went out of range. You can keep playing, and link again from the cable button."
         case .unexpected(let reason):
             reason
         }

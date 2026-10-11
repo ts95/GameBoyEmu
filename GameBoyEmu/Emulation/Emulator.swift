@@ -14,6 +14,8 @@ import Foundation
 ///
 /// - frames come out through an `AsyncStream`
 /// - button presses go in through `setJoypad(_:)`
+/// - link cable traffic goes in through `receiveFromCable(_:)` and out through the closure
+///   given to `plugInCable(_:)`
 actor Emulator {
     private let gameBoy = GameBoy()
     /// Whether the machine already has its cartridge in, from an earlier call to `run`.
@@ -31,6 +33,22 @@ actor Emulator {
     /// unmuting starts a new one; both happen at the next frame boundary.
     func setMuted(_ isMuted: Bool) {
         self.isMuted = isMuted
+    }
+
+    /// Plugs a link cable into the serial port. `send` carries each message the game sends
+    /// to the console at the other end, whose messages come back through `receiveFromCable(_:)`.
+    func plugInCable(_ send: @escaping @Sendable (LinkMessage) -> Void) {
+        gameBoy.memory.serial.cable = send
+    }
+
+    func unplugCable() {
+        gameBoy.memory.serial.cable = nil
+    }
+
+    /// Hands the serial port a message from the other console. Like everything else coming
+    /// in from outside, it lands between frames.
+    func receiveFromCable(_ message: LinkMessage) {
+        gameBoy.memory.serial.receive(message)
     }
 
     /// Starts the emulation and returns its frames, one array of pixels per frame.

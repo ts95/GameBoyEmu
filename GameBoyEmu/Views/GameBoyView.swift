@@ -17,6 +17,7 @@ struct GameBoyView: View {
 
     @FocusState private var isFocused: Bool
     @GestureState private var dPadState = DPadState.idle
+    @State private var isShowingLink = false
 
     /// Compact when there is little height to work with, as on a phone held sideways.
     @Environment(\.verticalSizeClass) private var verticalSizeClass
@@ -94,6 +95,31 @@ struct GameBoyView: View {
         .accessibilityLabel(model.isMuted ? "Unmute" : "Mute")
     }
 
+    var linkButton: some View {
+        Button {
+            isShowingLink = true
+        } label: {
+            Image(systemName: "cable.connector")
+                .font(.title3)
+                .frame(width: 44, height: 32)
+                // Pulses while a link is being set up
+                .symbolEffect(.pulse, isActive: model.linkState == .hosting || model.linkState == .joining)
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(model.linkState == .linked ? AnyShapeStyle(Color.accentColor) : AnyShapeStyle(.secondary))
+        .accessibilityLabel("Link cable")
+        .accessibilityValue(model.linkState == .linked ? "Linked" : "Unplugged")
+    }
+
+    /// The buttons that belong to the emulator rather than the console.
+    var utilityButtons: some View {
+        HStack(spacing: 0) {
+            linkButton
+            muteButton
+        }
+        .frame(maxWidth: .infinity, alignment: .trailing)
+    }
+
     var joypad: some View {
         VStack(spacing: 64) {
             HStack {
@@ -111,8 +137,7 @@ struct GameBoyView: View {
     var portraitLayout: some View {
         VStack {
             screen
-            muteButton
-                .frame(maxWidth: .infinity, alignment: .trailing)
+            utilityButtons
             Spacer()
             joypad
             Spacer()
@@ -138,8 +163,7 @@ struct GameBoyView: View {
             ZStack {
                 raised(actionButtons)
                 VStack {
-                    muteButton
-                        .frame(maxWidth: .infinity, alignment: .trailing)
+                    utilityButtons
                     Spacer()
                     startButton
                         .padding(.bottom, landscapeOptionButtonInset)
@@ -310,6 +334,18 @@ struct GameBoyView: View {
             if let game {
                 await model.run(game)
             }
+        }
+        .onDisappear {
+            model.unplugLink() // The cable doesn't reach outside the game
+        }
+        .onChange(of: model.error) { _, error in
+            if error != nil {
+                isShowingLink = false // Make way for the alert
+            }
+        }
+        // Last, so that the sheet doesn't pick up the console's lettering
+        .sheet(isPresented: $isShowingLink) {
+            LinkView(model: model, hostName: game?.title ?? "Game Boy")
         }
         .alert(isPresented: isShowingError, error: model.error) { _ in
             Button("OK") {}

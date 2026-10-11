@@ -4,6 +4,7 @@
 //
 
 import Foundation
+import Network
 import Observation
 
 /// The UI's side of the emulator: the picture to show and the buttons being held.
@@ -45,6 +46,120 @@ final class GameBoyViewModel {
 
     /// Whether the game stopped because of an error it can't continue from.
     private(set) var hasFailed = false
+
+    // MARK: - Link cable
+
+    enum LinkState: Equatable {
+        case unplugged
+        /// Advertising this device and waiting for another one to join.
+        case hosting
+        /// Connecting to a host.
+        case joining
+        case linked
+    }
+
+    private(set) var linkState = LinkState.unplugged
+    /// The hosts found while browsing.
+    private(set) var nearbyHosts: [Bonjour.Endpoint] = []
+    /// Why hosting or browsing is getting nowhere, if the system has said so.
+    private(set) var linkProblem: String?
+
+    private var linkTask: Task<Void, Never>?
+    private var browseTask: Task<Void, Never>?
+
+    /// Makes this device visible to others under `name`, and links with the first to join.
+    func hostLink(as name: String) {
+        unplugLink()
+        linkState = .hosting
+        linkTask = Task { [weak self, emulator] in
+            do {
+                try await NetworkLink.host(name: name, emulator: emulator) { isLinked in
+                    Task { @MainActor in
+                        self?.hostLinkChanged(isLinked)
+                    }
+                } onWaiting: { error in
+                    Task { @MainActor in
+                        self?.linkProblem = error.localizedDescription
+                    }
+                }
+                self?.linkEnded(nil)
+            } catch {
+                self?.linkEnded(error)
+            }
+        }
+    }
+
+    /// Starts keeping `nearbyHosts` up to date.
+    func startBrowsing() {
+        stopBrowsing()
+        browseTask = Task { [weak self] in
+            try? await NetworkLink.browse { hosts in
+                await MainActor.run {
+                    self?.nearbyHosts = hosts
+                }
+            } onWaiting: { error in
+                Task { @MainActor in
+                    self?.linkProblem = error.localizedDescription
+                }
+            }
+        }
+    }
+
+    func stopBrowsing() {
+        browseTask?.cancel()
+        browseTask = nil
+        nearbyHosts = []
+    }
+
+    func joinLink(_ host: Bonjour.Endpoint) {
+        unplugLink()
+        stopBrowsing() // Browsing on would slow the connection down
+        linkState = .joining
+        linkTask = Task { [weak self, emulator] in
+            do {
+                try await NetworkLink.join(host, emulator: emulator) {
+                    Task { @MainActor in
+                        if self?.linkState == .joining {
+                            self?.linkState = .linked
+                        }
+                    }
+                }
+                self?.linkEnded(nil)
+            } catch {
+                self?.linkEnded(error)
+            }
+        }
+    }
+
+    /// Ends the link, or the attempt to set one up.
+    func unplugLink() {
+        linkTask?.cancel()
+        linkTask = nil
+        linkState = .unplugged
+        linkProblem = nil
+    }
+
+    private func hostLinkChanged(_ isLinked: Bool) {
+        if isLinked, linkState == .hosting {
+            linkState = .linked
+        } else if !isLinked, linkState == .linked {
+            // The other console has gone, and a host only ever takes one
+            unplugLink()
+            error = .linkLost
+        }
+    }
+
+    /// Called when the link's task finishes by itself.
+    private func linkEnded(_ error: (any Error)?) {
+        guard !Task.isCancelled else {
+            return // Unplugged from this end, which has dealt with it
+        }
+        let wasLinked = linkState == .linked
+        unplugLink()
+        self.error = wasLinked ? .linkLost : .linkFailed(reason: error?.localizedDescription ?? "")
+    }
+
+    // MARK: - Running
 
     /// Runs a game, updating `frame` as frames arrive, until the calling task is cancelled.
     /// Anything that goes wrong ends up in `error` rather than being thrown, because this is
