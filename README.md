@@ -1,6 +1,6 @@
 # GameBoyEmu
 
-A Game Boy and Game Boy Color emulator written in Swift and SwiftUI, for iOS and macOS.
+A Game Boy and Game Boy Color emulator written in Swift and SwiftUI, for iOS 26 and macOS 26.
 
 ## Features
 
@@ -10,6 +10,7 @@ A Game Boy and Game Boy Color emulator written in Swift and SwiftUI, for iOS and
 - A library of opened ROMs, with a file picker
 - Touch controls with haptics, and keyboard controls (WASD, J/K, Z/X)
 - Game Boy Color-style palettes for original Game Boy games
+- Link cable between two nearby devices, over the local network (experimental)
 
 ## Running
 
@@ -21,6 +22,5 @@ ROMs are not included. Open your own from the library screen.
 ## Not supported
 
 - The real-time clock some cartridges have
-- Link cable
 - Super Game Boy features
 - Cartridge types other than MBC1, MBC3 and MBC5
