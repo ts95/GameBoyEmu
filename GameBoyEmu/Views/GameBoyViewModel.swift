@@ -96,6 +96,32 @@ final class GameBoyViewModel {
         }
     }
 
+    /// How many times faster than a real Game Boy the player wants the game to run.
+    var speed = 1 {
+        didSet {
+            sendSpeed()
+        }
+    }
+
+    static let speeds = 1...4
+
+    /// The speed the game runs at. With a link cable in, or on its way in, that is always
+    /// the real one: two consoles only understand each other while they keep the same time.
+    var effectiveSpeed: Int {
+        linkState == .unplugged ? speed : 1
+    }
+
+    /// Moves on to the next speed, and from the fastest back to the real one.
+    func cycleSpeed() {
+        speed = speed == Self.speeds.upperBound ? Self.speeds.lowerBound : speed + 1
+    }
+
+    private func sendSpeed() {
+        Task { [emulator, effectiveSpeed] in
+            await emulator.setSpeed(effectiveSpeed)
+        }
+    }
+
     private let emulator = Emulator()
 
     /// The problem to tell the player about, if any. Set back to `nil` once it has been shown.
@@ -115,7 +141,11 @@ final class GameBoyViewModel {
         case linked
     }
 
-    private(set) var linkState = LinkState.unplugged
+    private(set) var linkState = LinkState.unplugged {
+        didSet {
+            sendSpeed()
+        }
+    }
     /// The hosts found while browsing.
     private(set) var nearbyHosts: [Bonjour.Endpoint] = []
     /// Why hosting or browsing is getting nowhere, if the system has said so.

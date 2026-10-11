@@ -22,6 +22,13 @@ actor Emulator {
     private var isCartridgeLoaded = false
     private var joypadQueue = JoypadQueue()
     private var isMuted = false
+    private var speed = 1
+
+    /// Sets how many times faster than a real Game Boy the game runs. Takes effect at the
+    /// next frame boundary.
+    func setSpeed(_ speed: Int) {
+        self.speed = max(1, speed)
+    }
 
     /// Updates which buttons are held down. Takes effect at a frame boundary, when the
     /// emulation loop is suspended and the actor is free to run this.
@@ -113,8 +120,13 @@ actor Emulator {
         // Emulate a whole frame as fast as possible, then sleep until it is due. Sleeping
         // after every instruction can't work: a sleep takes far longer than the ~1µs asked for.
         while !Task.isCancelled {
-            gameBoy.memory.joypad = joypadQueue.advanceFrame()
-            try gameBoy.runFrame()
+            // Running fast is several frames in the time of one. Only the last of them is
+            // shown and heard: the sound skips ahead rather than rising in pitch.
+            for _ in 0..<speed {
+                gameBoy.memory.apu.pendingSamples.removeAll(keepingCapacity: true)
+                gameBoy.memory.joypad = joypadQueue.advanceFrame()
+                try gameBoy.runFrame()
+            }
             frames.yield(gameBoy.ppu.displayBuffer)
 
             if isMuted {

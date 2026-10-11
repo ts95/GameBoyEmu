@@ -98,6 +98,23 @@ struct GameBoyView: View {
         .accessibilityLabel(model.isMuted ? "Unmute" : "Mute")
     }
 
+    /// Steps through the speeds. Stuck at the real one while the link cable is in use.
+    var speedButton: some View {
+        Button {
+            model.cycleSpeed()
+        } label: {
+            Text("\(model.effectiveSpeed)×")
+                .font(.title3.bold())
+                .frame(width: 44, height: 32)
+                .contentTransition(.numericText())
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(model.effectiveSpeed > 1 ? AnyShapeStyle(Color.accentColor) : AnyShapeStyle(.secondary))
+        .disabled(model.linkState != .unplugged)
+        .accessibilityLabel("Speed")
+        .accessibilityValue("\(model.effectiveSpeed) times")
+    }
+
     var linkButton: some View {
         Button {
             isShowingLink = true
@@ -117,6 +134,7 @@ struct GameBoyView: View {
     /// The buttons that belong to the emulator rather than the console.
     var utilityButtons: some View {
         HStack(spacing: 0) {
+            speedButton
             linkButton
             muteButton
         }
@@ -396,6 +414,10 @@ struct GameBoyView: View {
             Button(model.isMuted ? "Unmute" : "Mute") {
                 model.isMuted.toggle()
             }
+            Button("Speed: \(model.effectiveSpeed)×") {
+                model.cycleSpeed()
+            }
+            .disabled(model.linkState != .unplugged)
             Button("Link Cable…") {
                 isShowingLink = true
             }
