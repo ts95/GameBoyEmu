@@ -8,7 +8,8 @@ A Game Boy and Game Boy Color emulator written in Swift and SwiftUI, for iOS 26 
 - Sound
 - Save data, kept between launches
 - A library of opened ROMs, with a file picker
-- Touch controls with haptics, and keyboard controls (WASD, J/K, Z/X)
+- Touch controls with haptics, and keyboard controls (WASD, J/K, Z/X or N/M)
+- Game controllers: pair one with the device and play (A and B as labelled on Xbox and Nintendo controllers, otherwise right button A and bottom button B; Menu and Options for Start and Select)
 - Game Boy Color-style palettes for original Game Boy games
 - Link cable between two nearby devices, over the local network (experimental)
 

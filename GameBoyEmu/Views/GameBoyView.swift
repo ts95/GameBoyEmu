@@ -18,6 +18,7 @@ struct GameBoyView: View {
     @FocusState private var isFocused: Bool
     @GestureState private var dPadState = DPadState.idle
     @State private var isShowingLink = false
+    @State private var keyboard = KeyboardControls()
 
     /// Compact when there is little height to work with, as on a phone held sideways.
     @Environment(\.verticalSizeClass) private var verticalSizeClass
@@ -199,9 +200,10 @@ struct GameBoyView: View {
                 .frame(width: 40, height: 40)
         }
         .frame(width: dPadSize, height: dPadSize)
-        // Tilt the cross towards the pressed direction, like the real rocker
-        .rotation3DEffect(.degrees(dPadState == .idle ? 0 : 12), axis: dPadTiltAxis)
-        .animation(.spring(duration: 0.15), value: dPadState)
+        // Tilt the cross towards the pressed direction, like the real rocker. This follows
+        // the model rather than the touch, so the keyboard and a controller move it too.
+        .rotation3DEffect(.degrees(model.joypad.dPadState == .idle ? 0 : 12), axis: dPadTiltAxis)
+        .animation(.spring(duration: 0.15), value: model.joypad.dPadState)
         .contentShape(Rectangle())
         // One gesture for the whole cross, so a thumb can slide from one direction to another.
         // The gesture state falls back to .idle when the finger lifts or the touch is cancelled.
@@ -221,7 +223,7 @@ struct GameBoyView: View {
     }
 
     var dPadTiltAxis: (x: CGFloat, y: CGFloat, z: CGFloat) {
-        switch dPadState {
+        switch model.joypad.dPadState {
         case .up, .idle: (1, 0, 0)
         case .down: (-1, 0, 0)
         case .left: (0, -1, 0)
@@ -244,15 +246,15 @@ struct GameBoyView: View {
 
     var actionButtons: some View {
         HStack(spacing: 16) {
-            actionButton("B") { model.joypad.bButtonPressed = $0 }
-            actionButton("A") { model.joypad.aButtonPressed = $0 }
+            actionButton("B", \.bButtonPressed)
+            actionButton("A", \.aButtonPressed)
         }
         .rotationEffect(.degrees(-20))
         .font(.title.bold())
         .foregroundStyle(.primary.opacity(0.5))
     }
 
-    func actionButton(_ title: String, onPressChange: @escaping (Bool) -> Void) -> some View {
+    func actionButton(_ title: String, _ button: WritableKeyPath<JoypadState, Bool>) -> some View {
         Button(action: {}, label: {
             Circle()
                 .fill(Color.accentColor)
@@ -261,7 +263,9 @@ struct GameBoyView: View {
                     Text(title)
                 }
         })
-        .buttonStyle(JoypadButtonStyle(onPressChange: onPressChange))
+        .buttonStyle(JoypadButtonStyle(isHeld: model.joypad[keyPath: button]) {
+            model.joypad[keyPath: button] = $0
+        })
     }
 
     var optionButtons: some View {
@@ -272,14 +276,14 @@ struct GameBoyView: View {
     }
 
     var selectButton: some View {
-        optionButton("Select") { model.joypad.selectButtonPressed = $0 }
+        optionButton("Select", \.selectButtonPressed)
     }
 
     var startButton: some View {
-        optionButton("Start") { model.joypad.startButtonPressed = $0 }
+        optionButton("Start", \.startButtonPressed)
     }
 
-    func optionButton(_ title: String, onPressChange: @escaping (Bool) -> Void) -> some View {
+    func optionButton(_ title: String, _ button: WritableKeyPath<JoypadState, Bool>) -> some View {
         Button(action: {}, label: {
             Text(title)
                 .font(.title3.bold())
@@ -289,7 +293,9 @@ struct GameBoyView: View {
                 .padding(.vertical, 6)
                 .background(.gray.opacity(0.3), in: RoundedRectangle(cornerRadius: 8))
         })
-        .buttonStyle(JoypadButtonStyle(onPressChange: onPressChange))
+        .buttonStyle(JoypadButtonStyle(isHeld: model.joypad[keyPath: button]) {
+            model.joypad[keyPath: button] = $0
+        })
         .rotationEffect(.degrees(-5))
     }
 
@@ -322,11 +328,11 @@ struct GameBoyView: View {
         .textCase(.uppercase)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(gameBoyBeige.opacity(0.2))
-        // Keyboard: WASD = d-pad, J = A, K = B, Z = Select, X = Start
+        // Keyboard: WASD = d-pad, J = A, K = B, Z or N = Select, X or M = Start
         .focusable()
         .focusEffectDisabled()
         .focused($isFocused)
-        .onKeyPress(phases: [.down, .up]) { model.joypad.handle($0) }
+        .onKeyPress(phases: .all) { keyboard.handle($0, joypad: &model.joypad) }
         .onAppear {
             isFocused = true
         }
@@ -358,13 +364,17 @@ struct GameBoyView: View {
 /// A button that reports being held down and released, rather than a completed tap,
 /// and sinks in while it is held.
 struct JoypadButtonStyle: ButtonStyle {
+    /// Whether the game sees the button as held, whatever is holding it: a finger, the
+    /// keyboard or a controller.
+    let isHeld: Bool
     let onPressChange: (Bool) -> Void
 
     func makeBody(configuration: Configuration) -> some View {
+        let isDown = isHeld || configuration.isPressed
         configuration.label
-            .scaleEffect(configuration.isPressed ? 0.88 : 1)
-            .brightness(configuration.isPressed ? -0.2 : 0)
-            .animation(.spring(duration: 0.15), value: configuration.isPressed)
+            .scaleEffect(isDown ? 0.88 : 1)
+            .brightness(isDown ? -0.2 : 0)
+            .animation(.spring(duration: 0.15), value: isDown)
             .onChange(of: configuration.isPressed) { _, isPressed in
                 onPressChange(isPressed)
             }

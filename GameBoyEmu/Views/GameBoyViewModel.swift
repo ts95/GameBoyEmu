@@ -4,6 +4,7 @@
 //
 
 import Foundation
+import GameController
 import Network
 import Observation
 
@@ -26,6 +27,22 @@ final class GameBoyViewModel {
             Task { [emulator, joypad] in
                 await emulator.setJoypad(joypad)
             }
+        }
+    }
+
+    /// What the game controller held at the last look, to tell when it changes.
+    private var controllerJoypad = JoypadState()
+
+    /// Takes over the buttons whenever the game controller's change. Until then, whatever
+    /// the screen or the keyboard last set stands, so the three can be mixed.
+    ///
+    /// ponytail: looked at once a frame rather than on the controller's own events, which
+    /// also covers one connecting or going away. A press shorter than a frame is missed.
+    private func readController() {
+        let held = GCController.current?.extendedGamepad.map { JoypadState($0) } ?? JoypadState()
+        if held != controllerJoypad {
+            controllerJoypad = held
+            joypad = held
         }
     }
 
@@ -185,6 +202,7 @@ final class GameBoyViewModel {
             }
             for try await frame in frames {
                 self.frame = frame
+                readController()
             }
         } catch let error as GameBoyError {
             self.error = error
