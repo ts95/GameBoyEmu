@@ -19,6 +19,8 @@ struct GameBoyView: View {
     @GestureState private var dPadState = DPadState.idle
     @State private var isShowingLink = false
     @State private var keyboard = KeyboardControls()
+    @State private var isShowingMenu = false
+    @Environment(\.dismiss) private var dismiss
 
     /// Compact when there is little height to work with, as on a phone held sideways.
     @Environment(\.verticalSizeClass) private var verticalSizeClass
@@ -205,6 +207,7 @@ struct GameBoyView: View {
         .rotation3DEffect(.degrees(model.joypad.dPadState == .idle ? 0 : 12), axis: dPadTiltAxis)
         .animation(.spring(duration: 0.15), value: model.joypad.dPadState)
         .contentShape(Rectangle())
+        #if !os(tvOS)
         // One gesture for the whole cross, so a thumb can slide from one direction to another.
         // The gesture state falls back to .idle when the finger lifts or the touch is cancelled.
         .gesture(
@@ -213,6 +216,7 @@ struct GameBoyView: View {
                     state = dPadDirection(at: value.location)
                 }
         )
+        #endif
         .onChange(of: dPadState) { _, newState in
             model.joypad.dPadState = newState
         }
@@ -310,8 +314,25 @@ struct GameBoyView: View {
         }
     }
 
+    /// On a television there is nothing to touch, so the console's controls are left out
+    /// and the screen gets the room. The remote does the pressing.
+    var televisionLayout: some View {
+        VStack(spacing: 32) {
+            screen
+            Text(model.isUsingGamepad
+                 ? "Controller: d-pad or stick, A, B, Start and Select  ·  Either shoulder button: menu"
+                 : "Clickpad: move, click for A  ·  Play/Pause: B  ·  Back: Start, Select and more")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .padding(40)
+    }
+
     var body: some View {
         Group {
+            #if os(tvOS)
+            televisionLayout
+            #else
             if isLandscape {
                 // The safe area already keeps the controls clear of the screen's rounded
                 // corners and the Dynamic Island, so no further side margin is added. The
@@ -323,6 +344,7 @@ struct GameBoyView: View {
                 portraitLayout
                     .padding()
             }
+            #endif
         }
         .fontDesign(.monospaced)
         .textCase(.uppercase)
@@ -349,6 +371,40 @@ struct GameBoyView: View {
                 isShowingLink = false // Make way for the alert
             }
         }
+        .onChange(of: isShowingMenu || isShowingLink) { _, isBusy in
+            model.ignoresController = isBusy
+        }
+        #if os(tvOS)
+        // The remote's Back button brings up what the remote has no buttons for. A game
+        // controller sends the same command from its B button, which is a button in the
+        // game, and has a Start and Select of its own.
+        .onExitCommand {
+            if !model.isUsingGamepad {
+                isShowingMenu = true
+            }
+        }
+        .onChange(of: model.menuRequests) {
+            isShowingMenu = true
+        }
+        .confirmationDialog(game?.title ?? "Game Boy", isPresented: $isShowingMenu, titleVisibility: .visible) {
+            Button("Start") {
+                model.tap(\.startButtonPressed)
+            }
+            Button("Select") {
+                model.tap(\.selectButtonPressed)
+            }
+            Button(model.isMuted ? "Unmute" : "Mute") {
+                model.isMuted.toggle()
+            }
+            Button("Link Cable…") {
+                isShowingLink = true
+            }
+            Button("Back to Library") {
+                dismiss()
+            }
+            Button("Cancel", role: .cancel) {}
+        }
+        #endif
         // Last, so that the sheet doesn't pick up the console's lettering
         .sheet(isPresented: $isShowingLink) {
             LinkView(model: model, hostName: game?.title ?? "Game Boy")

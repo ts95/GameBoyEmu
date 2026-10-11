@@ -27,7 +27,7 @@ struct Game: Identifiable, Hashable, Sendable {
 
     /// Saves live in the app's own container, as <rom>.sav
     var saveURL: URL {
-        URL.applicationSupportDirectory.appending(path: "\(id).sav")
+        GameLibrary.storageDirectory.appending(path: "\(id).sav")
     }
 }
 
@@ -48,7 +48,17 @@ final class GameLibrary {
     nonisolated static let includedROMNames = ["pokemon_red"]
     /// Where the ROMs the player opened are kept. On the watch, these are the ones the
     /// phone has sent over.
-    nonisolated static let romsDirectory = URL.applicationSupportDirectory.appending(path: "ROMs")
+    nonisolated static let romsDirectory = storageDirectory.appending(path: "ROMs")
+    /// Where the app keeps its files. An Apple TV only lets an app keep files among its
+    /// caches, which the system may clear when it runs short of space; iCloud then still
+    /// has the saves.
+    nonisolated static let storageDirectory: URL = {
+        #if os(tvOS)
+        .cachesDirectory
+        #else
+        .applicationSupportDirectory
+        #endif
+    }()
     private static let lastPlayedKey = "lastPlayed"
     private static let customTitlesKey = "customTitles"
 

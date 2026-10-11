@@ -19,10 +19,11 @@ struct LibraryView: View {
     @State private var newName = ""
     @State private var error: GameBoyError?
     @Environment(\.scenePhase) private var scenePhase
-    /// How each game's save stands with iCloud, as far as is known.
-    @State private var cloudStatuses: [Game.ID: CloudSaves.Status] = [:]
+    /// The games whose save is the same here and in iCloud, as of the last sync.
+    @State private var savesInCloud: Set<Game.ID> = []
+    /// Whether the player is signed in to iCloud. Not known until the first sync.
+    @State private var isCloudAvailable: Bool?
     @State private var isSyncing = false
-    @State private var statusTask: Task<Void, Never>?
 
     var body: some View {
         NavigationStack(path: $path) {
@@ -37,8 +38,14 @@ struct LibraryView: View {
 
                 Section {
                     if library.recent.isEmpty {
+                        #if os(tvOS)
+                        // An Apple TV has no files to pick from
+                        Text("Games you open on your other devices appear here.")
+                            .foregroundStyle(.secondary)
+                        #else
                         Text("Games you open appear here.")
                             .foregroundStyle(.secondary)
+                        #endif
                     }
                     ForEach(library.recent) { game in
                         row(for: game)
@@ -50,11 +57,13 @@ struct LibraryView: View {
                 }
             }
             .navigationTitle("Game Boy")
+            #if !os(tvOS)
             .toolbar {
                 Button("Open ROM…", systemImage: "folder") {
                     isPickingROM = true
                 }
             }
+            #endif
             .navigationDestination(for: Game.self) { game in
                 GameBoyView(model: sessions.model(for: game), game: game)
                     .navigationTitle(game.title)
@@ -62,6 +71,7 @@ struct LibraryView: View {
                     .navigationBarTitleDisplayMode(.inline)
                 #endif
             }
+            #if !os(tvOS)
             // ROM files have no registered type, so any file can be picked and the
             // library decides whether it is a game
             .fileImporter(isPresented: $isPickingROM, allowedContentTypes: [.data]) { result in
@@ -71,6 +81,7 @@ struct LibraryView: View {
                     show(error)
                 }
             }
+            #endif
             .confirmationDialog(
                 "Delete the save data of \(gameToDeleteSaveOf?.title ?? "")?",
                 isPresented: isConfirmingDeletion,
@@ -84,7 +95,7 @@ struct LibraryView: View {
                         // it back, so it has to start over too
                         sessions.end(game)
                         Task {
-                            await CloudSaves.forget(game.id)
+                            await CloudSync.forgetSave(of: game.id)
                         }
                     }
                 }
@@ -162,11 +173,11 @@ struct LibraryView: View {
                         Text("No save data")
                     }
 
-                    if game.save != nil, let status = cloudStatuses[game.id] {
-                        switch status {
-                        case .synced: Label("In iCloud", systemImage: "checkmark.icloud")
-                        case .uploading: Label("Uploading to iCloud", systemImage: "icloud.and.arrow.up")
-                        case .waiting: Label("Not in iCloud yet", systemImage: "icloud.slash")
+                    if game.save != nil, isCloudAvailable == true {
+                        if savesInCloud.contains(game.id) {
+                            Label("In iCloud", systemImage: "checkmark.icloud")
+                        } else {
+                            Label("Not in iCloud yet", systemImage: "icloud.slash")
                         }
                     }
                 }
@@ -186,20 +197,22 @@ struct LibraryView: View {
         .contextMenu {
             actions(for: game)
         }
+        #if !os(tvOS)
         .swipeActions {
             actions(for: game)
         }
+        #endif
     }
 
     /// Says whether save data is being synced at all, below the list.
     @ViewBuilder
     private var cloudFooter: some View {
-        if !CloudSaves.isAvailable {
-            Label("Sign in to iCloud to sync save data between your devices.", systemImage: "icloud.slash")
-        } else if isSyncing {
-            Label("Syncing save data with iCloud…", systemImage: "arrow.triangle.2.circlepath.icloud")
-        } else {
-            Label("Save data syncs between your devices through iCloud.", systemImage: "icloud")
+        if isSyncing {
+            Label("Syncing with iCloud…", systemImage: "arrow.triangle.2.circlepath.icloud")
+        } else if isCloudAvailable == true {
+            Label("Games and save data sync between your devices through iCloud.", systemImage: "icloud")
+        } else if isCloudAvailable == false {
+            Label("Sign in to iCloud to sync games and save data between your devices.", systemImage: "icloud.slash")
         }
     }
 
@@ -215,6 +228,9 @@ struct LibraryView: View {
                 perform {
                     try library.remove(game)
                     sessions.end(game)
+                    Task {
+                        await CloudSync.forgetROM(named: game.romURL.lastPathComponent)
+                    }
                 }
             }
             .tint(.orange)
@@ -267,33 +283,28 @@ struct LibraryView: View {
         }
     }
 
-    /// Brings save data in step with iCloud, for the given games or else all of them.
+    /// Brings save data in step with iCloud for the given games. Without any, it is every
+    /// game's save data, and the ROMs as well.
     private func syncSaves(of games: [Game]? = nil) async {
+        let isEverything = games == nil
         let games = games ?? library.included + library.recent
         isSyncing = true
-        let replaced = await CloudSaves.sync(games.map(\.id))
+        let outcome = await CloudSync.sync(saves: games.map(\.id), roms: isEverything)
         isSyncing = false
+
+        isCloudAvailable = outcome.isAvailable
+        savesInCloud.subtract(games.map(\.id))
+        savesInCloud.formUnion(outcome.savesInCloud)
         library.reload()
         // A game frozen here still holds the older save in memory and would write it
         // back, so it starts over from the new one. One that is on screen right now is
         // left to carry on.
-        for game in games where replaced.contains(game.id) && !path.contains(game) {
+        for game in games where outcome.replacedSaves.contains(game.id) && !path.contains(game) {
             sessions.end(game)
         }
 
-        // Handing a save to iCloud isn't the end of it: look again until it has been sent.
-        // On its own task, so that a game waiting for this sync can start.
-        // ponytail: gives up after half a minute, and the next sync picks it up from there.
-        let all = (library.included + library.recent).map(\.id)
-        statusTask?.cancel()
-        statusTask = Task {
-            for _ in 0..<15 where !Task.isCancelled {
-                cloudStatuses = await CloudSaves.status(of: all)
-                guard cloudStatuses.values.contains(.uploading) else {
-                    break
-                }
-                try? await Task.sleep(for: .seconds(2))
-            }
+        if outcome.didChangeROMs {
+            await syncSaves() // Games that have just arrived haven't had their saves fetched
         }
     }
 

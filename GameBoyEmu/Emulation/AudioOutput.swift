@@ -24,7 +24,7 @@ final class AudioOutput {
 
     /// - Throws: If the host's audio hardware can't be started.
     init() throws {
-        #if os(iOS)
+        #if os(iOS) || os(tvOS)
         try AVAudioSession.sharedInstance().setCategory(.playback)
         try AVAudioSession.sharedInstance().setActive(true)
         #endif

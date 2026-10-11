@@ -162,7 +162,7 @@ final class WatchSync: NSObject, WCSessionDelegate, Sendable {
     }
 
     private static func saveURL(forGame id: String) -> URL {
-        URL.applicationSupportDirectory.appending(path: "\(id).sav")
+        GameLibrary.storageDirectory.appending(path: "\(id).sav")
     }
 
     private static func modificationDate(of url: URL) -> Date? {

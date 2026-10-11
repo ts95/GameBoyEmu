@@ -33,13 +33,53 @@ final class GameBoyViewModel {
     /// What the game controller held at the last look, to tell when it changes.
     private var controllerJoypad = JoypadState()
 
+    /// Set while something other than the game has the controller's attention, such as a
+    /// menu, so that finding one's way around it doesn't press buttons in the game.
+    var ignoresController = false
+
+    /// Goes up each time a shoulder button on the controller is pressed, which asks for
+    /// the game's menu where there is one.
+    private(set) var menuRequests = 0
+    private var wasAskingForMenu = false
+
+    /// Whether the controller last used is a full one, as opposed to the Apple TV remote.
+    var isUsingGamepad: Bool {
+        GCController.current?.extendedGamepad != nil
+    }
+
+    /// Presses a button and lets go of it again a moment later, for controls that can't
+    /// be held down.
+    func tap(_ button: WritableKeyPath<JoypadState, Bool>) {
+        joypad[keyPath: button] = true
+        Task {
+            try? await Task.sleep(for: .milliseconds(100))
+            joypad[keyPath: button] = false
+        }
+    }
+
     /// Takes over the buttons whenever the game controller's change. Until then, whatever
     /// the screen or the keyboard last set stands, so the three can be mixed.
     ///
     /// ponytail: looked at once a frame rather than on the controller's own events, which
     /// also covers one connecting or going away. A press shorter than a frame is missed.
     private func readController() {
-        let held = GCController.current?.extendedGamepad.map { JoypadState($0) } ?? JoypadState()
+        var held = JoypadState()
+        if !ignoresController, let controller = GCController.current ?? GCController.controllers().first {
+            if let pad = controller.extendedGamepad {
+                held = JoypadState(pad)
+                // A Game Boy has no shoulder buttons, so they are free to ask for the menu
+                let isAskingForMenu = pad.leftShoulder.isPressed || pad.rightShoulder.isPressed
+                if isAskingForMenu && !wasAskingForMenu {
+                    menuRequests += 1
+                }
+                wasAskingForMenu = isAskingForMenu
+            } else if let remote = controller.microGamepad {
+                // Where the thumb rests on the clickpad, rather than how far it has moved
+                // since it touched down: resting it on an edge holds that direction
+                remote.reportsAbsoluteDpadValues = true
+                held = JoypadState(remote: remote)
+            }
+        }
         if held != controllerJoypad {
             controllerJoypad = held
             joypad = held
