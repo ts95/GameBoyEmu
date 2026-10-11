@@ -215,7 +215,8 @@ struct JoypadQueue {
     /// The state the game currently sees.
     private(set) var current = JoypadState()
     private var pending: [JoypadState] = []
-    private var framesShown = JoypadQueue.minimumFrames
+    /// How many more frames the current state is owed before the next may take over.
+    private var framesOwed = 0
 
     /// Records a new state from the UI, to be shown once the ones before it have had their turn.
     mutating func report(_ state: JoypadState) {
@@ -224,11 +225,25 @@ struct JoypadQueue {
 
     /// Called once per frame. Returns the state the game should see during that frame.
     mutating func advanceFrame() -> JoypadState {
-        if framesShown >= JoypadQueue.minimumFrames, !pending.isEmpty {
-            current = pending.removeFirst()
-            framesShown = 0
+        if framesOwed <= 0, !pending.isEmpty {
+            let next = pending.removeFirst()
+            // Only a press has to last for the game to notice it. Letting go is over in a
+            // frame, so that a change of direction by way of nothing held isn't kept waiting.
+            framesOwed = next.pressesSomething(notHeldIn: current) ? JoypadQueue.minimumFrames : 1
+            current = next
         }
-        framesShown += 1
+        framesOwed -= 1
         return current
+    }
+}
+
+private extension JoypadState {
+    /// Whether this state holds a button or a direction that `other` doesn't.
+    func pressesSomething(notHeldIn other: JoypadState) -> Bool {
+        (aButtonPressed && !other.aButtonPressed)
+            || (bButtonPressed && !other.bButtonPressed)
+            || (startButtonPressed && !other.startButtonPressed)
+            || (selectButtonPressed && !other.selectButtonPressed)
+            || (dPadState != .idle && dPadState != other.dPadState)
     }
 }

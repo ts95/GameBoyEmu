@@ -5,6 +5,7 @@
 //  Created by Toni Sucic on 23/06/2024.
 //
 
+import GameController
 import SwiftUI
 import SwiftData
 
@@ -337,11 +338,27 @@ struct GameBoyView: View {
     var televisionLayout: some View {
         VStack(spacing: 32) {
             screen
-            Text(model.isUsingGamepad
-                 ? "Controller: d-pad or stick, A, B, Start and Select  ·  Either shoulder button: menu"
-                 : "Clickpad: move, click for A  ·  Play/Pause: B  ·  Back: Start, Select and more")
+                .overlay {
+                    if !model.isGamepadConnected {
+                        // ponytail: the game carries on behind this. Freeze it if that
+                        // ever costs anyone a life.
+                        VStack(spacing: 12) {
+                            Image(systemName: "gamecontroller")
+                                .font(.largeTitle)
+                            Text("Connect a game controller to play")
+                                .font(.headline)
+                            Text("Settings  ›  Remotes and Devices  ›  Bluetooth")
+                                .font(.caption)
+                        }
+                        .foregroundStyle(.white)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .background(.black.opacity(0.75), in: RoundedRectangle(cornerRadius: 12))
+                    }
+                }
+            Text("Either shoulder button: menu")
                 .font(.caption)
                 .foregroundStyle(.secondary)
+                .opacity(model.isGamepadConnected ? 1 : 0)
         }
         .padding(40)
     }
@@ -349,7 +366,15 @@ struct GameBoyView: View {
     var body: some View {
         Group {
             #if os(tvOS)
-            televisionLayout
+            // Nothing outside reaches into the host, so the lettering is set again here
+            GameControllerHost(
+                keepsButtonsToGame: model.isGamepadConnected,
+                content: televisionLayout
+                    .fontDesign(.monospaced)
+                    .textCase(.uppercase)
+                    .focusable()
+                    .focusEffectDisabled()
+            )
             #else
             if isLandscape {
                 // The safe area already keeps the controls clear of the screen's rounded
@@ -368,6 +393,7 @@ struct GameBoyView: View {
         .textCase(.uppercase)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(gameBoyBeige.opacity(0.2))
+        #if !os(tvOS)
         // Keyboard: WASD = d-pad, J = A, K = B, Z or N = Select, X or M = Start
         .focusable()
         .focusEffectDisabled()
@@ -376,6 +402,7 @@ struct GameBoyView: View {
         .onAppear {
             isFocused = true
         }
+        #endif
         .task {
             if let game {
                 await model.run(game)
@@ -393,24 +420,12 @@ struct GameBoyView: View {
             model.ignoresController = isBusy
         }
         #if os(tvOS)
-        // The remote's Back button brings up what the remote has no buttons for. A game
-        // controller sends the same command from its B button, which is a button in the
-        // game, and has a Start and Select of its own.
-        .onExitCommand {
-            if !model.isUsingGamepad {
-                isShowingMenu = true
-            }
-        }
+        // A shoulder button on the controller brings up what a television has no room
+        // to keep on screen
         .onChange(of: model.menuRequests) {
             isShowingMenu = true
         }
         .confirmationDialog(game?.title ?? "Game Boy", isPresented: $isShowingMenu, titleVisibility: .visible) {
-            Button("Start") {
-                model.tap(\.startButtonPressed)
-            }
-            Button("Select") {
-                model.tap(\.selectButtonPressed)
-            }
             Button(model.isMuted ? "Unmute" : "Mute") {
                 model.isMuted.toggle()
             }
@@ -438,6 +453,38 @@ struct GameBoyView: View {
         }
     }
 }
+
+#if os(tvOS)
+/// Shows a view while keeping a game controller's buttons to the game.
+///
+/// An Apple TV treats a controller's B button as Back and its Menu button as a way out,
+/// whatever the app is doing with them. Only a view controller of this kind can tell the
+/// system to stay out of it, and it does so for whatever has the focus inside it. So the
+/// game's picture is shown inside one, and is what has the focus.
+private struct GameControllerHost<Content: View>: UIViewControllerRepresentable {
+    /// Whether the buttons are the game's alone. When they aren't, the remote and the
+    /// controller find their way around as they do everywhere else.
+    let keepsButtonsToGame: Bool
+    let content: Content
+
+    func makeUIViewController(context: Context) -> GCEventViewController {
+        let controller = GCEventViewController()
+        let host = UIHostingController(rootView: content)
+        host.view.backgroundColor = .clear
+        controller.addChild(host)
+        host.view.frame = controller.view.bounds
+        host.view.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        controller.view.addSubview(host.view)
+        host.didMove(toParent: controller)
+        return controller
+    }
+
+    func updateUIViewController(_ controller: GCEventViewController, context: Context) {
+        (controller.children.first as? UIHostingController<Content>)?.rootView = content
+        controller.controllerUserInteractionEnabled = !keepsButtonsToGame
+    }
+}
+#endif
 
 /// A button that reports being held down and released, rather than a completed tap,
 /// and sinks in while it is held.

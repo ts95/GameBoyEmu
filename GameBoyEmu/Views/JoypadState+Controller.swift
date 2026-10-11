@@ -23,15 +23,6 @@ extension JoypadState {
         startButtonPressed = pad.buttonMenu.isPressed
         selectButtonPressed = pad.buttonOptions?.isPressed ?? false
     }
-
-    /// What the Apple TV remote is holding down right now. It has too few buttons for a
-    /// Game Boy: the clickpad is the d-pad and, clicked, A; Play/Pause is B. Start and
-    /// Select are in the menu the Back button brings up.
-    init(remote: GCMicroGamepad) {
-        dPadState = DPadState(x: remote.dpad.xAxis.value, y: remote.dpad.yAxis.value)
-        aButtonPressed = remote.buttonA.isPressed
-        bButtonPressed = remote.buttonX.isPressed
-    }
 }
 
 extension DPadState {

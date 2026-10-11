@@ -15,7 +15,7 @@ with a companion app for Apple Watch.
 - Game controllers: pair one with the device and play (A and B as labelled on Xbox and Nintendo controllers, otherwise right button A and bottom button B; Menu and Options for Start and Select)
 - Game Boy Color-style palettes for original Game Boy games
 - Link cable between two nearby devices, over the local network: one hosts, the other joins
-- Apple TV: play with the remote (clickpad to move and, clicked, A; Play/Pause for B; Back for a menu with Start and Select) or a game controller
+- Apple TV: needs a game controller to play; either shoulder button opens a menu with mute, speed, the link cable and the way back to the library
 - Apple Watch app (experimental, no sound): plays the games and saves from the iPhone app. Tilt the wrist for the d-pad, double tap or tap the screen for A, flick the wrist for B, and turn the Digital Crown for Start and Select
 
 ## Running

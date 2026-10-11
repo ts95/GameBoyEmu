@@ -32,6 +32,22 @@ import Testing
     #expect(queue.advanceFrame() == a)
 }
 
+@Test func aChangeOfDirectionByWayOfNothingHeldIsNotKeptWaiting() throws {
+    var right = JoypadState(), up = JoypadState()
+    right.dPadState = .right
+    up.dPadState = .up
+
+    var queue = JoypadQueue()
+    queue.report(right)
+    for _ in 0..<10 { _ = queue.advanceFrame() }
+
+    // The thumb rolls from right to up, letting go in between
+    queue.report(JoypadState())
+    queue.report(up)
+    #expect(queue.advanceFrame() == JoypadState())
+    #expect(queue.advanceFrame() == up)
+}
+
 // MARK: - Emulator
 
 @Test func emulatorDeliversFramesUntilItsConsumerStops() async throws {

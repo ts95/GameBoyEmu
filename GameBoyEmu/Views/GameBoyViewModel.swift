@@ -42,20 +42,8 @@ final class GameBoyViewModel {
     private(set) var menuRequests = 0
     private var wasAskingForMenu = false
 
-    /// Whether the controller last used is a full one, as opposed to the Apple TV remote.
-    var isUsingGamepad: Bool {
-        GCController.current?.extendedGamepad != nil
-    }
-
-    /// Presses a button and lets go of it again a moment later, for controls that can't
-    /// be held down.
-    func tap(_ button: WritableKeyPath<JoypadState, Bool>) {
-        joypad[keyPath: button] = true
-        Task {
-            try? await Task.sleep(for: .milliseconds(100))
-            joypad[keyPath: button] = false
-        }
-    }
+    /// Whether a game controller is connected. Looked for once a frame, like what it holds.
+    private(set) var isGamepadConnected = false
 
     /// Takes over the buttons whenever the game controller's change. Until then, whatever
     /// the screen or the keyboard last set stands, so the three can be mixed.
@@ -63,22 +51,22 @@ final class GameBoyViewModel {
     /// ponytail: looked at once a frame rather than on the controller's own events, which
     /// also covers one connecting or going away. A press shorter than a frame is missed.
     private func readController() {
+        // The Apple TV remote also counts as a controller, but not as one with enough
+        // buttons to play with
+        let pad = GCController.current?.extendedGamepad ?? GCController.controllers().lazy.compactMap(\.extendedGamepad).first
+        if isGamepadConnected != (pad != nil) {
+            isGamepadConnected = pad != nil
+        }
+
         var held = JoypadState()
-        if !ignoresController, let controller = GCController.current ?? GCController.controllers().first {
-            if let pad = controller.extendedGamepad {
-                held = JoypadState(pad)
-                // A Game Boy has no shoulder buttons, so they are free to ask for the menu
-                let isAskingForMenu = pad.leftShoulder.isPressed || pad.rightShoulder.isPressed
-                if isAskingForMenu && !wasAskingForMenu {
-                    menuRequests += 1
-                }
-                wasAskingForMenu = isAskingForMenu
-            } else if let remote = controller.microGamepad {
-                // Where the thumb rests on the clickpad, rather than how far it has moved
-                // since it touched down: resting it on an edge holds that direction
-                remote.reportsAbsoluteDpadValues = true
-                held = JoypadState(remote: remote)
+        if let pad, !ignoresController {
+            held = JoypadState(pad)
+            // A Game Boy has no shoulder buttons, so they are free to ask for the menu
+            let isAskingForMenu = pad.leftShoulder.isPressed || pad.rightShoulder.isPressed
+            if isAskingForMenu && !wasAskingForMenu {
+                menuRequests += 1
             }
+            wasAskingForMenu = isAskingForMenu
         }
         if held != controllerJoypad {
             controllerJoypad = held
