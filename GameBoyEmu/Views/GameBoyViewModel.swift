@@ -221,6 +221,7 @@ final class GameBoyViewModel {
 /// for this, so it lasts only as long as the app does. After that, the game's own save data
 /// is what remains.
 @MainActor
+@Observable
 final class GameSessions {
     private var models: [Game.ID: GameBoyViewModel] = [:]
 
@@ -232,6 +233,11 @@ final class GameSessions {
         let model = GameBoyViewModel()
         models[game.id] = model
         return model
+    }
+
+    /// Whether a game has been started and can be carried on from where it was left.
+    func isInProgress(_ game: Game) -> Bool {
+        models[game.id].map { !$0.hasFailed } ?? false
     }
 
     /// Forgets a game's session, so that it starts from the beginning next time.

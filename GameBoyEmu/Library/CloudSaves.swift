@@ -15,6 +15,44 @@ import Foundation
 /// A deleted save is an empty file in iCloud. That way the deletion reaches the other
 /// devices as well, instead of one of them putting its copy back.
 enum CloudSaves {
+    /// How a save on this device stands with its copy in iCloud.
+    enum Status: Sendable {
+        /// The same save is in iCloud, where the other devices can get it.
+        case synced
+        /// The save has been handed to iCloud, which hasn't finished sending it.
+        case uploading
+        /// iCloud doesn't have this version of the save yet.
+        case waiting
+    }
+
+    /// Whether the player is signed in to iCloud, so that there is anything to sync with.
+    static var isAvailable: Bool {
+        FileManager.default.ubiquityIdentityToken != nil
+    }
+
+    /// How the saves of the given games stand with iCloud. Games without a save on this
+    /// device are left out, and so is everything when the player isn't signed in.
+    @concurrent
+    static func status(of ids: [String]) async -> [String: Status] {
+        guard let cloud = folder else {
+            return [:]
+        }
+        var statuses: [String: Status] = [:]
+        for id in ids {
+            guard let localDate = modificationDate(of: .applicationSupportDirectory.appending(path: "\(id).sav")) else {
+                continue
+            }
+            let values = try? cloud.appending(path: "\(id).sav")
+                .resourceValues(forKeys: [.contentModificationDateKey, .ubiquitousItemIsUploadedKey])
+            if let cloudDate = values?.contentModificationDate, abs(cloudDate.timeIntervalSince(localDate)) <= 1 {
+                statuses[id] = values?.ubiquitousItemIsUploaded == true ? .synced : .uploading
+            } else {
+                statuses[id] = .waiting
+            }
+        }
+        return statuses
+    }
+
     /// Brings the saves of the given games in step with iCloud. Does nothing when the
     /// player isn't signed in to iCloud.
     ///
