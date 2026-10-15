@@ -19,9 +19,13 @@ struct WatchGameView: View {
     let game: Game
     let sync: WatchSync
 
-    /// Where the Digital Crown is, and where it was at the last press it caused.
+    /// Where the Digital Crown is, where it was when it last came to rest, and when it last
+    /// moved. A turn presses one button however far it goes; the next press waits until the
+    /// crown has rested.
     @State private var crown = 0.0
-    @State private var crownAtLastPress = 0.0
+    @State private var crownAtRest = 0.0
+    @State private var crownLastMoved = Date.distantPast
+    @State private var hasCrownPressed = false
     @FocusState private var isFocused: Bool
     @Environment(\.scenePhase) private var scenePhase
 
@@ -107,13 +111,19 @@ struct WatchGameView: View {
         .focusable()
         .focused($isFocused)
         .digitalCrownRotation($crown, from: -1000, through: 1000, by: 1, sensitivity: .low, isContinuous: true)
-        .onChange(of: crown) { _, crown in
-            // One press per notch, however far the crown is spun
-            guard abs(crown - crownAtLastPress) >= 1 else {
+        .onChange(of: crown) { oldCrown, crown in
+            let now = Date.now
+            if now.timeIntervalSince(crownLastMoved) > 0.3 {
+                // A new turn
+                crownAtRest = oldCrown
+                hasCrownPressed = false
+            }
+            crownLastMoved = now
+            guard !hasCrownPressed, abs(crown - crownAtRest) >= 1 else {
                 return
             }
-            model.tap(crown > crownAtLastPress ? \.startButtonPressed : \.selectButtonPressed)
-            crownAtLastPress = crown
+            model.tap(crown > crownAtRest ? \.startButtonPressed : \.selectButtonPressed)
+            hasCrownPressed = true
         }
         .overlay {
             if let error = model.error {
