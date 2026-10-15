@@ -19,6 +19,8 @@ final class WatchGameModel {
 
     /// The problem to tell the player about, if any.
     private(set) var error: GameBoyError?
+    /// Whether the game stopped with an error, and so can't be carried on.
+    private(set) var hasFailed = false
 
     private let emulator = Emulator()
 
@@ -53,6 +55,9 @@ final class WatchGameModel {
     }
 
     /// Runs a game, updating `frame` as frames arrive, until the calling task is cancelled.
+    ///
+    /// The first call starts the game. Later calls carry on from where the previous one was
+    /// cancelled, because the emulator keeps the machine's state in memory.
     func run(_ game: Game) async {
         do {
             let rom: Data
@@ -72,8 +77,10 @@ final class WatchGameModel {
             }
         } catch let error as GameBoyError {
             self.error = error
+            hasFailed = true
         } catch {
             self.error = .unexpected(reason: error.localizedDescription)
+            hasFailed = true
         }
     }
 
