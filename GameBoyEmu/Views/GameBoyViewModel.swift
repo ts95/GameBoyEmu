@@ -41,6 +41,8 @@ final class GameBoyViewModel {
     /// the game's menu where there is one.
     private(set) var menuRequests = 0
     private var wasAskingForMenu = false
+    private var wasAskingForFaster = false
+    private var wasAskingForSlower = false
 
     /// Whether a game controller is connected. Looked for once a frame, like what it holds.
     private(set) var isGamepadConnected = false
@@ -67,6 +69,23 @@ final class GameBoyViewModel {
                 menuRequests += 1
             }
             wasAskingForMenu = isAskingForMenu
+
+            // Nor has it an X or a Y, which step the speed up and down. They go by the
+            // letters printed on them, which sit differently on an Xbox controller than on
+            // a Nintendo one; without letters, the top button is faster and the left slower.
+            let leftIsLabelledX = pad.buttonX.sfSymbolsName?.hasPrefix("x.") ?? false
+            let isAskingForFaster = (leftIsLabelledX ? pad.buttonX : pad.buttonY).isPressed
+            let isAskingForSlower = (leftIsLabelledX ? pad.buttonY : pad.buttonX).isPressed
+            if linkState == .unplugged {
+                if isAskingForFaster && !wasAskingForFaster {
+                    speed = min(speed + 1, Self.speeds.upperBound)
+                }
+                if isAskingForSlower && !wasAskingForSlower {
+                    speed = max(speed - 1, Self.speeds.lowerBound)
+                }
+            }
+            wasAskingForFaster = isAskingForFaster
+            wasAskingForSlower = isAskingForSlower
         }
         if held != controllerJoypad {
             controllerJoypad = held

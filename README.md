@@ -7,7 +7,7 @@ with a companion app for Apple Watch.
 
 - Original Game Boy and Game Boy Color games, including double-speed mode
 - Sound
-- Fast-forward at 2×, 3× or 4× speed (not while a link cable is in use)
+- Fast-forward at 2×, 3× or 4× speed (not while a link cable is in use); on a controller, X is faster and Y slower
 - Save data, kept between launches
 - ROMs and save data synced between your devices through iCloud; the newest save wins
 - A library of opened ROMs, with a file picker, showing each game's save, whether it is in iCloud, and whether the game is in progress

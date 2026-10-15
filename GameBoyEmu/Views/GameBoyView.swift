@@ -355,7 +355,7 @@ struct GameBoyView: View {
                         .background(.black.opacity(0.75), in: RoundedRectangle(cornerRadius: 12))
                     }
                 }
-            Text("Either shoulder button: menu")
+            Text("X: faster  ·  Y: slower  ·  Either shoulder button: menu")
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .opacity(model.isGamepadConnected ? 1 : 0)
