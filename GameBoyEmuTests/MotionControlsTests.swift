@@ -22,14 +22,14 @@ import Testing
     var controls = MotionControls()
     _ = controls.update(gravityX: 0, gravityY: 0, rotationRate: 0, time: 0)
 
-    _ = controls.update(gravityX: 0.2, gravityY: 0, rotationRate: 0, time: 0.1)
+    _ = controls.update(gravityX: 0.15, gravityY: 0, rotationRate: 0, time: 0.1)
     #expect(controls.dPad == .idle) // Not far enough to press
 
-    _ = controls.update(gravityX: 0.3, gravityY: 0, rotationRate: 0, time: 0.2)
-    _ = controls.update(gravityX: 0.2, gravityY: 0, rotationRate: 0, time: 0.3)
+    _ = controls.update(gravityX: 0.25, gravityY: 0, rotationRate: 0, time: 0.2)
+    _ = controls.update(gravityX: 0.15, gravityY: 0, rotationRate: 0, time: 0.3)
     #expect(controls.dPad == .right) // But far enough to keep holding
 
-    _ = controls.update(gravityX: 0.1, gravityY: 0, rotationRate: 0, time: 0.4)
+    _ = controls.update(gravityX: 0.05, gravityY: 0, rotationRate: 0, time: 0.4)
     #expect(controls.dPad == .idle)
 }
 
@@ -37,14 +37,17 @@ import Testing
     var controls = MotionControls()
     _ = controls.update(gravityX: 0, gravityY: 0, rotationRate: 0, time: 0)
 
-    let first = controls.update(gravityX: 0, gravityY: 0, rotationRate: 8, time: 1)
+    let tooGentle = controls.update(gravityX: 0, gravityY: 0, rotationRate: 7, time: 0.5)
+    #expect(!tooGentle)
+
+    let first = controls.update(gravityX: 0, gravityY: 0, rotationRate: 12, time: 1)
     // The rest of the same flick, with the watch swinging through a steep tilt
-    let rest = controls.update(gravityX: 0.8, gravityY: 0, rotationRate: 8, time: 1.2)
+    let rest = controls.update(gravityX: 0.8, gravityY: 0, rotationRate: 12, time: 1.2)
     #expect(first)
     #expect(!rest)
     #expect(controls.dPad == .idle)
 
-    let second = controls.update(gravityX: 0, gravityY: 0, rotationRate: 8, time: 2)
+    let second = controls.update(gravityX: 0, gravityY: 0, rotationRate: 12, time: 2)
     #expect(second)
 }
 

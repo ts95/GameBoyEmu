@@ -14,14 +14,14 @@ import Foundation
 /// tell one reading from the next.
 struct MotionControls {
     /// How far the watch must tilt before a direction is pressed, as the change in the pull
-    /// of gravity along the screen (0.25 is about 15 degrees).
-    static let pressTilt = 0.25
+    /// of gravity along the screen (0.18 is about 10 degrees).
+    static let pressTilt = 0.18
     /// A pressed direction lets go below this. Being lower than `pressTilt`, a wrist held
     /// right at the edge doesn't make the direction flicker.
-    static let releaseTilt = 0.15
+    static let releaseTilt = 0.1
     /// How fast the wrist must turn to count as a flick, in radians per second. Steering
-    /// by tilting stays well under this.
-    static let flickRate = 6.0
+    /// by tilting stays well under this, and so does turning the wrist on the way somewhere.
+    static let flickRate = 9.0
     /// How long a flick takes to play out, in seconds.
     static let flickDuration = 0.5
 
