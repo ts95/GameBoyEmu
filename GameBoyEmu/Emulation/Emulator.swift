@@ -17,6 +17,10 @@ import Foundation
 /// - link cable traffic goes in through `receiveFromCable(_:)` and out through the closure
 ///   given to `plugInCable(_:)`
 actor Emulator {
+    /// Posted, on the emulator's own thread, when the game has saved and the save file has
+    /// been written with what changed. The object is the file's URL.
+    static let didWriteSave = Notification.Name("EmulatorDidWriteSave")
+
     private let gameBoy = GameBoy()
     /// Whether the machine already has its cartridge in, from an earlier call to `run`.
     private var isCartridgeLoaded = false
@@ -195,10 +199,19 @@ actor Emulator {
     }
 
     private func writeSave(to url: URL) throws {
+        let save = Data(gameBoy.memory.externalRam)
+        // Games write to cartridge RAM without saving, often putting back what was there.
+        // Only a real change touches the file, so that its date stays the date the game
+        // last saved, which is how devices tell which of their saves is newer.
+        if (try? Data(contentsOf: url)) == save {
+            gameBoy.memory.hasUnsavedExternalRam = false
+            return
+        }
         try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
         // Atomic, so a crash mid-write can't leave a half-written save behind
-        try Data(gameBoy.memory.externalRam).write(to: url, options: .atomic)
+        try save.write(to: url, options: .atomic)
         gameBoy.memory.hasUnsavedExternalRam = false
+        NotificationCenter.default.post(name: Self.didWriteSave, object: url)
     }
 }
 
