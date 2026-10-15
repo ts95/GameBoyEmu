@@ -41,6 +41,8 @@
 		E2674EAC2C281FA500EE0206 /* GameBoyView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2674EAB2C281FA500EE0206 /* GameBoyView.swift */; };
 		E2674EB02C281FA600EE0206 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = E2674EAF2C281FA600EE0206 /* Assets.xcassets */; };
 		E2674EB42C281FA600EE0206 /* Preview Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = E2674EB32C281FA600EE0206 /* Preview Assets.xcassets */; };
+		E2B85763308167F8003A9331 /* WatchConnectivitySwift in Frameworks */ = {isa = PBXBuildFile; platformFilter = ios; productRef = E2B85762308167F8003A9331 /* WatchConnectivitySwift */; };
+		E2B8576630816800003A9331 /* WatchConnectivitySwift in Frameworks */ = {isa = PBXBuildFile; productRef = E2B8576530816800003A9331 /* WatchConnectivitySwift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -132,6 +134,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				E2B8576630816800003A9331 /* WatchConnectivitySwift in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -139,6 +142,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				E2B85763308167F8003A9331 /* WatchConnectivitySwift in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -224,6 +228,7 @@
 				E2674EA82C281FA500EE0206 /* GameBoyEmu */,
 				E23D545C307AD77A0004A0DC /* GameBoyEmuTests */,
 				E23EB4DF307B91A900A9E387 /* GameBoyEmu Watch App */,
+				E2B8576430816800003A9331 /* Frameworks */,
 				E2674EA72C281FA500EE0206 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -261,6 +266,13 @@
 				E2674EB32C281FA600EE0206 /* Preview Assets.xcassets */,
 			);
 			path = "Preview Content";
+			sourceTree = "<group>";
+		};
+		E2B8576430816800003A9331 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			name = Frameworks;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -306,6 +318,7 @@
 			);
 			name = "GameBoyEmu Watch App";
 			packageProductDependencies = (
+				E2B8576530816800003A9331 /* WatchConnectivitySwift */,
 			);
 			productName = "GameBoyEmu Watch App";
 			productReference = E23EB4DB307B91A900A9E387 /* GameBoyEmu Watch App.app */;
@@ -326,6 +339,9 @@
 				E23EB4DE307B91A900A9E387 /* PBXTargetDependency */,
 			);
 			name = GameBoyEmu;
+			packageProductDependencies = (
+				E2B85762308167F8003A9331 /* WatchConnectivitySwift */,
+			);
 			productName = GameBoyEmu;
 			productReference = E2674EA62C281FA500EE0206 /* GameBoyEmu.app */;
 			productType = "com.apple.product-type.application";
@@ -361,6 +377,9 @@
 				Base,
 			);
 			mainGroup = E2674E9D2C281FA500EE0206;
+			packageReferences = (
+				E2B85761308167F8003A9331 /* XCRemoteSwiftPackageReference "WatchConnectivitySwift" */,
+			);
 			productRefGroup = E2674EA72C281FA500EE0206 /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
@@ -851,6 +870,30 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		E2B85761308167F8003A9331 /* XCRemoteSwiftPackageReference "WatchConnectivitySwift" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/ts95/WatchConnectivitySwift";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 5.2.2;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		E2B85762308167F8003A9331 /* WatchConnectivitySwift */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = E2B85761308167F8003A9331 /* XCRemoteSwiftPackageReference "WatchConnectivitySwift" */;
+			productName = WatchConnectivitySwift;
+		};
+		E2B8576530816800003A9331 /* WatchConnectivitySwift */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = E2B85761308167F8003A9331 /* XCRemoteSwiftPackageReference "WatchConnectivitySwift" */;
+			productName = WatchConnectivitySwift;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = E2674E9E2C281FA500EE0206 /* Project object */;
 }

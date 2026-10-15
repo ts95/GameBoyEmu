@@ -10,7 +10,7 @@ import SwiftUI
 /// is controlled are the watch's own.
 @main
 struct GameBoyEmuWatchApp: App {
-    private let sync = WatchSync()
+    private let sync = WatchSync.shared
 
     var body: some Scene {
         WindowGroup {

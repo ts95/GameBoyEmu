@@ -1,0 +1,15 @@
+{
+  "originHash" : "f28db6dd744656c245c073c6e8547699bc7150c15ecd0046bd3603ac21d27c4a",
+  "pins" : [
+    {
+      "identity" : "watchconnectivityswift",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/ts95/WatchConnectivitySwift",
+      "state" : {
+        "revision" : "f11a5fd48c4b7666b830b9ed3b42938195e7a366",
+        "version" : "5.2.2"
+      }
+    }
+  ],
+  "version" : 3
+}

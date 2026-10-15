@@ -58,13 +58,17 @@ struct WatchLibraryView: View {
             // Also runs when coming back from a game, which is when the save data has changed
             .onAppear {
                 library.reload()
-                sync.requestGames()
+                Task {
+                    await sync.requestGames()
+                }
             }
             // Raising the wrist brings the app back without the library appearing again, and
             // the phone may have saved since
             .onChange(of: scenePhase) { _, phase in
                 if phase == .active {
-                    sync.requestGames()
+                    Task {
+                        await sync.requestGames()
+                    }
                 }
             }
             .onReceive(NotificationCenter.default.publisher(for: WatchSync.didReceiveFile)) { notification in

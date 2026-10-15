@@ -13,7 +13,7 @@ struct GameBoyEmuApp: App {
     #if canImport(WatchConnectivity)
     // Set up at launch rather than by a view: the watch can wake the app in the
     // background, where no view ever appears
-    private let watchSync = WatchSync()
+    private let watchSync = WatchSync.shared
     #endif
 
     var body: some Scene {

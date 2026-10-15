@@ -304,7 +304,9 @@ struct LibraryView: View {
         }
         #if os(iOS)
         // Whether made here or fetched from iCloud, a new save goes straight on to the watch
-        WatchSync.sendNewSaves()
+        Task {
+            await WatchSync.shared.sendNewSaves()
+        }
         #endif
 
         if outcome.didChangeROMs {
