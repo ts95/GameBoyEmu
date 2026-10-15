@@ -10,9 +10,9 @@ import WatchConnectivity
 /// Keeps the games and save data on the watch in step with the phone's.
 ///
 /// The phone is where games come from. The watch tells it which ROMs and saves it has, and
-/// the phone answers by sending the ROMs it lacks and the saves that are newer. A save made
-/// on the watch is sent the other way. Between two versions of a save, the one written last
-/// wins.
+/// the phone answers by sending the ROMs it lacks. Saves go both ways: whenever a game saves,
+/// on either device, the save is sent to the other one if it is newer than what that one is
+/// known to have. Between two versions of a save, the one written last wins.
 ///
 /// The same class runs on both devices. The system delivers its callbacks on a background
 /// queue, and everything here works on files only, so nothing is shared with the UI.
@@ -29,8 +29,12 @@ final class WatchSync: NSObject, WCSessionDelegate, Sendable {
     private static let kindKey = "kind"
     private static let nameKey = "name"
     private static let modifiedKey = "modified"
-    /// When each save last sent to the other device was made, by game id.
-    private static let sentSavesKey = "watchSyncSentSaves"
+    /// When the save the other device has of each game was made, as far as this one knows,
+    /// by game id.
+    private static let savesOnOtherDeviceKey = "watchSyncSavesOnOtherDevice"
+    /// Where saves are copied to while they are on their way. The save itself may be
+    /// written again before the transfer is done, and must not change under it.
+    private static let outbox = FileManager.default.temporaryDirectory.appending(path: "WatchSyncOutbox")
 
     /// Starts talking to the other device, if there can be one.
     override init() {
@@ -38,6 +42,31 @@ final class WatchSync: NSObject, WCSessionDelegate, Sendable {
         if WCSession.isSupported() {
             WCSession.default.delegate = self
             WCSession.default.activate()
+            // A game has saved: on to the other device with it
+            NotificationCenter.default.addObserver(forName: Emulator.didWriteSave, object: nil, queue: .main) { _ in
+                Self.sendNewSaves()
+            }
+        }
+    }
+
+    /// Sends the other device every save that is newer than the one it is known to have. The
+    /// system delivers the files even while the app there isn't running.
+    static func sendNewSaves() {
+        let session = WCSession.default
+        #if os(iOS)
+        let isOtherAppInstalled = session.isWatchAppInstalled
+        #else
+        let isOtherAppInstalled = session.isCompanionAppInstalled
+        #endif
+        guard session.activationState == .activated, isOtherAppInstalled else {
+            return
+        }
+        let savesOnOtherDevice = savesOnOtherDevice
+        for rom in romURLs {
+            let id = rom.deletingPathExtension().lastPathComponent
+            if let modified = modificationDate(of: saveURL(forGame: id)), modified > savesOnOtherDevice[id] ?? .distantPast {
+                sendSave(forGame: id, modified: modified)
+            }
         }
     }
 
@@ -61,11 +90,6 @@ final class WatchSync: NSObject, WCSessionDelegate, Sendable {
             Self.savesKey: saves,
         ])
     }
-
-    /// Sends a game's save data to the phone.
-    func sendSave(of game: Game) {
-        Self.sendSave(forGame: game.id)
-    }
     #endif
 
     // MARK: - Phone to watch
@@ -74,36 +98,20 @@ final class WatchSync: NSObject, WCSessionDelegate, Sendable {
     /// The watch has said what it has: send the ROMs it lacks and the saves that are newer.
     func session(_ session: WCSession, didReceiveUserInfo userInfo: [String: Any] = [:]) {
         let namesOnWatch = Set(userInfo[Self.romsKey] as? [String] ?? [])
-        let savesOnWatch = userInfo[Self.savesKey] as? [String: Date] ?? [:]
         let alreadyOnTheirWay = Set(session.outstandingFileTransfers.map(\.file.fileURL))
-
-        for rom in Self.romURLs {
-            if !namesOnWatch.contains(rom.lastPathComponent), !alreadyOnTheirWay.contains(rom) {
-                session.transferFile(rom, metadata: [Self.kindKey: "rom", Self.nameKey: rom.lastPathComponent])
-            }
-
-            let id = rom.deletingPathExtension().lastPathComponent
-            if let modified = Self.modificationDate(of: Self.saveURL(forGame: id)),
-               modified > savesOnWatch[id] ?? .distantPast,
-               !alreadyOnTheirWay.contains(Self.saveURL(forGame: id)) {
-                Self.sendSave(forGame: id)
-            }
+        for rom in Self.romURLs where !namesOnWatch.contains(rom.lastPathComponent) && !alreadyOnTheirWay.contains(rom) {
+            session.transferFile(rom, metadata: [Self.kindKey: "rom", Self.nameKey: rom.lastPathComponent])
         }
-    }
 
-    /// Sends the watch every save that has changed since it was last sent, without waiting
-    /// to be asked. The watch keeps whichever copy is newer, and the system delivers the
-    /// files even while the watch app isn't running, so they are there when it opens.
-    static func sendNewSaves() {
-        guard WCSession.default.activationState == .activated, WCSession.default.isWatchAppInstalled else {
-            return
-        }
-        let sent = UserDefaults.standard.dictionary(forKey: sentSavesKey) as? [String: Date] ?? [:]
-        for rom in romURLs {
+        // What the watch says it has is better than what was last sent: a transfer may
+        // have failed, or the app may have been deleted and installed again
+        let savesOnWatch = userInfo[Self.savesKey] as? [String: Date] ?? [:]
+        Self.savesOnOtherDevice = Dictionary(uniqueKeysWithValues: Self.romURLs.map { rom in
             let id = rom.deletingPathExtension().lastPathComponent
-            if let modified = modificationDate(of: saveURL(forGame: id)), modified > sent[id] ?? .distantPast {
-                sendSave(forGame: id)
-            }
+            return (id, savesOnWatch[id] ?? .distantPast)
+        })
+        DispatchQueue.main.async {
+            Self.sendNewSaves()
         }
     }
 
@@ -120,6 +128,9 @@ final class WatchSync: NSObject, WCSessionDelegate, Sendable {
         #if os(watchOS)
         requestGames()
         #endif
+        DispatchQueue.main.async {
+            Self.sendNewSaves() // Saves made while there was no session
+        }
     }
 
     /// A file has arrived. It is only there until this method returns, so it is put in
@@ -139,8 +150,12 @@ final class WatchSync: NSObject, WCSessionDelegate, Sendable {
         case "save":
             destination = Self.saveURL(forGame: id)
             // Whichever was written last wins. Without a date there is no telling.
-            guard let modified = metadata[Self.modifiedKey] as? Date,
-                  modified > Self.modificationDate(of: destination) ?? .distantPast else {
+            guard let modified = metadata[Self.modifiedKey] as? Date else {
+                return
+            }
+            // Either way, the other device has this one, and needn't be sent it back
+            Self.noteSaveOnOtherDevice(id: id, modified: modified)
+            guard modified > Self.modificationDate(of: destination) ?? .distantPast else {
                 return
             }
         default:
@@ -164,16 +179,54 @@ final class WatchSync: NSObject, WCSessionDelegate, Sendable {
         }
     }
 
-    private static func sendSave(forGame id: String) {
-        let url = saveURL(forGame: id)
-        guard WCSession.default.activationState == .activated, let modified = modificationDate(of: url) else {
-            return
+    func session(_ session: WCSession, didFinish fileTransfer: WCSessionFileTransfer, error: (any Error)?) {
+        let file = fileTransfer.file
+        guard file.fileURL.deletingLastPathComponent() == Self.outbox else {
+            return // A ROM, sent from where it is kept
         }
-        WCSession.default.transferFile(url, metadata: [kindKey: "save", nameKey: url.lastPathComponent, modifiedKey: modified])
+        try? FileManager.default.removeItem(at: file.fileURL)
 
-        var sent = UserDefaults.standard.dictionary(forKey: sentSavesKey) as? [String: Date] ?? [:]
-        sent[id] = modified
-        UserDefaults.standard.set(sent, forKey: sentSavesKey)
+        // Not delivered, so the other device doesn't have it after all, and the next
+        // save or request tries again. Unless a newer save has been sent since.
+        if error != nil,
+           let name = file.metadata?[Self.nameKey] as? String,
+           let modified = file.metadata?[Self.modifiedKey] as? Date {
+            let id = URL(filePath: name).deletingPathExtension().lastPathComponent
+            var saves = Self.savesOnOtherDevice
+            if saves[id] == modified {
+                saves[id] = nil
+                Self.savesOnOtherDevice = saves
+            }
+        }
+    }
+
+    private static func sendSave(forGame id: String, modified: Date) {
+        let url = saveURL(forGame: id)
+        let copy = outbox.appending(path: "\(UUID().uuidString).sav")
+        do {
+            try FileManager.default.createDirectory(at: outbox, withIntermediateDirectories: true)
+            try FileManager.default.copyItem(at: url, to: copy)
+        } catch {
+            return // ponytail: the next save or request tries again
+        }
+
+        // An older save of the same game that is still on its way is no use any more
+        for transfer in WCSession.default.outstandingFileTransfers where transfer.file.metadata?[nameKey] as? String == url.lastPathComponent {
+            transfer.cancel()
+        }
+        WCSession.default.transferFile(copy, metadata: [kindKey: "save", nameKey: url.lastPathComponent, modifiedKey: modified])
+        noteSaveOnOtherDevice(id: id, modified: modified)
+    }
+
+    private static var savesOnOtherDevice: [String: Date] {
+        get { UserDefaults.standard.dictionary(forKey: savesOnOtherDeviceKey) as? [String: Date] ?? [:] }
+        set { UserDefaults.standard.set(newValue, forKey: savesOnOtherDeviceKey) }
+    }
+
+    private static func noteSaveOnOtherDevice(id: String, modified: Date) {
+        var saves = savesOnOtherDevice
+        saves[id] = max(saves[id] ?? .distantPast, modified)
+        savesOnOtherDevice = saves
     }
 
     /// Every ROM on this device: the ones the player opened and the ones that ship with the app.

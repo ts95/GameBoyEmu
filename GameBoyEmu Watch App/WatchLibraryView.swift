@@ -52,7 +52,7 @@ struct WatchLibraryView: View {
             .navigationTitle("Game Boy")
             .navigationDestination(for: Game.self) { game in
                 if let model = sessions[game.id] {
-                    WatchGameView(model: model, game: game, sync: sync)
+                    WatchGameView(model: model, game: game)
                 }
             }
             // Also runs when coming back from a game, which is when the save data has changed

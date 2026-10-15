@@ -17,7 +17,6 @@ struct WatchGameView: View {
     /// was left.
     let model: WatchGameModel
     let game: Game
-    let sync: WatchSync
 
     /// Where the Digital Crown is, where it was when it last came to rest, and when it last
     /// moved. A turn presses one button however far it goes; the next press waits until the
@@ -27,7 +26,6 @@ struct WatchGameView: View {
     @State private var crownLastMoved = Date.distantPast
     @State private var hasCrownPressed = false
     @FocusState private var isFocused: Bool
-    @Environment(\.scenePhase) private var scenePhase
 
     /// The button last pressed on the screen, shown over its half until a moment after the
     /// finger lifts.
@@ -145,14 +143,9 @@ struct WatchGameView: View {
             model.startMotion()
             await model.run(game)
         }
+        // Saves go to the phone by themselves, as soon as the game makes them
         .onDisappear {
             model.stopMotion()
-            sendSave()
-        }
-        .onChange(of: scenePhase) { _, phase in
-            if phase != .active {
-                sendSave() // The wrist went down, and the game may never be left properly
-            }
         }
     }
 
@@ -177,15 +170,6 @@ struct WatchGameView: View {
             if press == presses {
                 shownButton = nil
             }
-        }
-    }
-
-    private func sendSave() {
-        Task {
-            // ponytail: the emulator writes the save a moment after the game stops, and
-            // there is no telling exactly when. A second is plenty.
-            try? await Task.sleep(for: .seconds(1))
-            sync.sendSave(of: game)
         }
     }
 }
