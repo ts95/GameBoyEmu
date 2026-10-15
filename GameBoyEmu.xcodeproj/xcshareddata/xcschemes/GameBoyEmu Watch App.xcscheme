@@ -20,19 +20,6 @@
                ReferencedContainer = "container:GameBoyEmu.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
-         <BuildActionEntry
-            buildForTesting = "YES"
-            buildForRunning = "YES"
-            buildForProfiling = "YES"
-            buildForArchiving = "YES"
-            buildForAnalyzing = "YES">
-            <BuildableReference
-               BuildableIdentifier = "primary"
-               BlueprintIdentifier = "E2674EA52C281FA500EE0206"
-               BuildableName = "GameBoyEmu.app"
-               ReferencedContainer = "container:GameBoyEmu.xcodeproj">
-            </BuildableReference>
-         </BuildActionEntry>
       </BuildActionEntries>
    </BuildAction>
    <TestAction
