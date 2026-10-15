@@ -302,6 +302,10 @@ struct LibraryView: View {
         for game in games where outcome.replacedSaves.contains(game.id) && !path.contains(game) {
             sessions.end(game)
         }
+        #if os(iOS)
+        // Whether made here or fetched from iCloud, a new save goes straight on to the watch
+        WatchSync.sendNewSaves()
+        #endif
 
         if outcome.didChangeROMs {
             await syncSaves() // Games that have just arrived haven't had their saves fetched

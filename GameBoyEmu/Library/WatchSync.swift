@@ -29,6 +29,8 @@ final class WatchSync: NSObject, WCSessionDelegate, Sendable {
     private static let kindKey = "kind"
     private static let nameKey = "name"
     private static let modifiedKey = "modified"
+    /// When each save last sent to the other device was made, by game id.
+    private static let sentSavesKey = "watchSyncSentSaves"
 
     /// Starts talking to the other device, if there can be one.
     override init() {
@@ -85,6 +87,22 @@ final class WatchSync: NSObject, WCSessionDelegate, Sendable {
                modified > savesOnWatch[id] ?? .distantPast,
                !alreadyOnTheirWay.contains(Self.saveURL(forGame: id)) {
                 Self.sendSave(forGame: id)
+            }
+        }
+    }
+
+    /// Sends the watch every save that has changed since it was last sent, without waiting
+    /// to be asked. The watch keeps whichever copy is newer, and the system delivers the
+    /// files even while the watch app isn't running, so they are there when it opens.
+    static func sendNewSaves() {
+        guard WCSession.default.activationState == .activated, WCSession.default.isWatchAppInstalled else {
+            return
+        }
+        let sent = UserDefaults.standard.dictionary(forKey: sentSavesKey) as? [String: Date] ?? [:]
+        for rom in romURLs {
+            let id = rom.deletingPathExtension().lastPathComponent
+            if let modified = modificationDate(of: saveURL(forGame: id)), modified > sent[id] ?? .distantPast {
+                sendSave(forGame: id)
             }
         }
     }
@@ -152,6 +170,10 @@ final class WatchSync: NSObject, WCSessionDelegate, Sendable {
             return
         }
         WCSession.default.transferFile(url, metadata: [kindKey: "save", nameKey: url.lastPathComponent, modifiedKey: modified])
+
+        var sent = UserDefaults.standard.dictionary(forKey: sentSavesKey) as? [String: Date] ?? [:]
+        sent[id] = modified
+        UserDefaults.standard.set(sent, forKey: sentSavesKey)
     }
 
     /// Every ROM on this device: the ones the player opened and the ones that ship with the app.

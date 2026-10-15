@@ -15,6 +15,7 @@ struct WatchLibraryView: View {
     @State private var sessions: [Game.ID: WatchGameModel] = [:]
     /// The game being played, if any. Empty while the library itself is showing.
     @State private var path: [Game] = []
+    @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
         NavigationStack(path: $path) {
@@ -58,6 +59,13 @@ struct WatchLibraryView: View {
             .onAppear {
                 library.reload()
                 sync.requestGames()
+            }
+            // Raising the wrist brings the app back without the library appearing again, and
+            // the phone may have saved since
+            .onChange(of: scenePhase) { _, phase in
+                if phase == .active {
+                    sync.requestGames()
+                }
             }
             .onReceive(NotificationCenter.default.publisher(for: WatchSync.didReceiveFile)) { notification in
                 library.reload()
